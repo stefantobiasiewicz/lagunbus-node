@@ -88,10 +88,9 @@ def lo(t: ValueType) -> int:
 def hi(t: ValueType) -> int:
     """Largest value.
 
-    `u32` is capped at `INT32_MAX`, **exactly as the C library does**: there a value
-    lives in an `int32_t`, and the upper half of `u32` cannot be carried. The spec
-    allows up to `0xFFFFFFFE`. The two libraries are to behave identically, so the cap
-    is copied here rather than fixed on one side only — see zadania/FEAT-03.md.
+    `u32` is capped at `INT32_MAX`, **exactly as the C library does**, where a value
+    lives in an `int32_t`. The spec allows up to `0xFFFFFFFE`. A deliberate cut, decided
+    for both languages — README.md § Decisions says why and when to revisit it.
     """
     spec = t.spec
     if spec.signed:

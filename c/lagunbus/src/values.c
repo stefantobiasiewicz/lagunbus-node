@@ -60,8 +60,10 @@ int32_t lb_hi(lb_type_t type)
     if (spec->is_signed) {
         return (int32_t)((1u << (spec->size * 8u - 1u)) - 1u);
     }
-    /* u32 does not fit into int32_t — and it does not fit into LagunBus as a signed
-     * value either. We clamp to what can actually be carried. */
+    /* u32 does not fit into int32_t, so a WRITE is accepted only up to INT32_MAX —
+     * a deliberate cut, not an oversight; the reasons, what it does not affect and when
+     * to revisit it are in README.md § Decisions. Reads and reports carry the raw bits
+     * and are not limited. */
     if (spec->size == 4u) {
         return INT32_MAX;
     }

@@ -6,7 +6,7 @@ node double exactly these four faults, and a simulator needs the same ones
 (zadania/FEAT-02.md).
 
 They live **between the node and the bus**, not inside the node, and that is the whole
-design (zadania/FEAT-03.md):
+design (zadania/zrobione/FEAT-03.md):
 
 - every one of the four can be told from the frames alone — a RESPONSE, a segment
   number, a moment in time, a request addressed to this node;

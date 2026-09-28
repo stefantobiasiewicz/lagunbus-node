@@ -77,7 +77,7 @@
     {"type": "u16", "lo": 0, "hi": 65534},
     {"type": "map8", "lo": 0, "hi": 255},
     {"type": "map16", "lo": 0, "hi": 65535},
-    {"note": "the C library's cap, not the spec's 0xFFFFFFFE — see zadania/FEAT-03.md", "type": "u32", "lo": 0, "hi": 2147483647}
+    {"note": "a deliberate cut below the spec's 0xFFFFFFFE, in both libraries — README.md § Decisions", "type": "u32", "lo": 0, "hi": 2147483647}
   ],
 
   "in_range": [

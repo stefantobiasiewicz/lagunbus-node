@@ -5,7 +5,7 @@ constant come from lagunbus-spec/05-mapowanie-can.md. Nothing here knows about a
 socket — this is a pure codec.
 
 It is deliberately **not** shared with the hub (`lagunhub.protocol.frame`): the node
-library has no line in common with the hub (zadania/FEAT-03.md, N2 and N7). Agreement
+library has no line in common with the hub (zadania/zrobione/FEAT-03.md, N2 and N7). Agreement
 between the two is what the codec vectors in `vectors/` are for.
 """
 

@@ -9,7 +9,7 @@ which takes the C library as a submodule and adds only the glue: the ESP32-C3 po
 `key` and `output` applications, the ESP-IDF container and the flashing scripts.
 
 Why this is a repository of its own, and what was decided along the way, is written in
-[`zadania/FEAT-03.md`](../zadania/FEAT-03.md).
+[`zadania/zrobione/FEAT-03.md`](../zadania/zrobione/FEAT-03.md).
 
 ```
   lagunbus-spec ──── registry/*.yaml
@@ -24,6 +24,13 @@ Why this is a repository of its own, and what was decided along the way, is writ
         ▼                    ▼
   devices/ (submodule)       simulator (zadania/FEAT-02.md)
 ```
+
+> **TODO:** this repository exists only locally — there is no GitHub repository yet.
+> `devices` already records it as a submodule at
+> `git@github.com:stefantobiasiewicz/lagunbus-node.git`; until that exists and `main` is
+> pushed there, a fresh clone of `devices` cannot fetch the library. Once created:
+> `git remote add origin <url> && git push -u origin main` here, and if the name differs,
+> `git submodule set-url lib/lagunbus-node <url>` in `devices`.
 
 The spec repository has to sit next to this one (`../lagunbus-spec`) for the registry
 generator and its check.
@@ -75,7 +82,7 @@ things a simulator needs and firmware does not:
 
 The Python code keeps C's fixed widths on purpose: counters wrap at their C width, and
 time is arithmetic modulo 2³² as `millis()` is in C. Where C does something because of its
-types, Python copies it, and says so. One such case is `u32` capped at `INT32_MAX`.
+types, Python copies it, and says so. One such case is `u32` capped at `INT32_MAX` — see below.
 
 ## Holding the two together
 
@@ -105,6 +112,35 @@ two libraries is worth having. It means one of them is wrong, or the spec can be
 ways, and it goes to a decision straight away (`zadania/README.md`).
 
 Adding behaviour: write the scenario first, see it fail in both, make both pass.
+
+## Decisions
+
+### `u32` is writable only up to `INT32_MAX` (2026-09-29)
+
+The spec gives `u32` the range `0 … 0xFFFFFFFE`. This library accepts a **write** of a
+`u32` attribute only up to `0x7FFFFFFF`; above that the node answers `INVALID_VALUE`.
+A deliberate cut, in both languages alike.
+
+**Why.** A value lives in `lb_value_t`, an `int32_t` with an "absent" flag — one type for
+every scalar, so an attribute array is uniform and `lb_in_range` is a single comparison.
+The upper half of `u32` does not fit in it. The alternatives cost more than the range is
+worth today:
+
+- an `int64_t` value doubles every attribute in RAM, and makes every comparison a
+  multi-instruction 64-bit operation on the ESP32-C3's 32-bit RISC-V core — paid by
+  every attribute of every device for a range none of them uses;
+- an unsigned raw value with the sign kept per type turns every range check into a
+  branch on the type, in the one place that must stay obviously correct.
+
+**What it does not affect.** Only the range check on a write. Reading and reporting go
+through the raw bits: a `u32` counter (`Uptime`, `PressCount`, `TxFrames`) goes past
+2³¹ on the wire correctly. And today **no writable `u32` attribute exists**, so no real
+write is refused.
+
+**When to revisit.** With the first writable `u32` attribute whose values can exceed
+2³¹ − 1 (a meter preset, say). Then both libraries change together, and the `u32` entry
+in `vectors/codec.json` → `ranges` changes with them: it records the cap on purpose,
+so that the conformance tests fail the moment one side lifts it alone.
 
 ## The registry
 
