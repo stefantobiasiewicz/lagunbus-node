@@ -1,0 +1,105 @@
+{
+  "about": "Codec vectors: whole values in, whole bits out. Both libraries run every entry (python/tests/conformance/test_codec.py). Identifiers come from lagunbus-spec/PRZYKLADY.md, worked out by hand from chapter 05; the rest were written out from 02-typy-danych.md and 05-mapowanie-can.md, and the ShortId value was computed independently with Python's zlib.crc32. Numbers are written as hex strings where the spec writes them in hex.",
+
+  "identifiers": [
+    {"note": "PRZYKLADY 2: Recall scene 1 in group 5", "kind": "GROUP_COMMAND", "address": "0x005", "endpoint": 3, "element": "0x01", "can_id": "0x08014301"},
+    {"note": "PRZYKLADY 1: hub -> Groups of 0x020", "kind": "COMMAND", "address": "0x020", "endpoint": 2, "element": "0x00", "can_id": "0x06080200"},
+    {"note": "PRZYKLADY 1: the reply from the same address", "kind": "RESPONSE", "address": "0x020", "endpoint": 2, "element": "0x00", "can_id": "0x0E080200"},
+    {"note": "PRZYKLADY 2: Store on Scenes", "kind": "COMMAND", "address": "0x020", "endpoint": 3, "element": "0x00", "can_id": "0x06080300"},
+    {"note": "PRZYKLADY 2: its reply", "kind": "RESPONSE", "address": "0x020", "endpoint": 3, "element": "0x00", "can_id": "0x0E080300"},
+    {"note": "PRZYKLADY 3: Click from the panel key", "kind": "EVENT", "address": "0x012", "endpoint": 4, "element": "0x03", "can_id": "0x02048403"},
+    {"note": "PRZYKLADY 4: OnOff report of the relay", "kind": "REPORT", "address": "0x020", "endpoint": 4, "element": "0x00", "can_id": "0x10080400"},
+    {"note": "PRZYKLADY 4: Level report of the dimmer ep4", "kind": "REPORT", "address": "0x021", "endpoint": 4, "element": "0x01", "can_id": "0x10084401"},
+    {"note": "PRZYKLADY 4: Level report of the dimmer ep5", "kind": "REPORT", "address": "0x021", "endpoint": 5, "element": "0x01", "can_id": "0x10084501"},
+    {"note": "PRZYKLADY 5: Off to group 1", "kind": "GROUP_COMMAND", "address": "0x001", "endpoint": 0, "element": "0x00", "can_id": "0x08004000"},
+    {"note": "PRZYKLADY 6: Toggle to 0x020 ep4", "kind": "COMMAND", "address": "0x020", "endpoint": 4, "element": "0x02", "can_id": "0x06080402"},
+    {"note": "PRZYKLADY 6: its reply", "kind": "RESPONSE", "address": "0x020", "endpoint": 4, "element": "0x02", "can_id": "0x0E080402"},
+    {"note": "PRZYKLADY 7: current report, 0x020 ep8", "kind": "REPORT", "address": "0x020", "endpoint": 8, "element": "0x00", "can_id": "0x10080800"},
+    {"note": "PRZYKLADY 7: temperature report, 0x150", "kind": "REPORT", "address": "0x150", "endpoint": 4, "element": "0x00", "can_id": "0x10540400"},
+    {"note": "PRZYKLADY 8: read Uid", "kind": "READ", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x0C080000"},
+    {"note": "PRZYKLADY 8: SEGMENTED reply", "kind": "RESPONSE", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x0E080000"},
+    {"note": "PRZYKLADY 8: the segments", "kind": "LONG_RESPONSE", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x12080000"},
+    {"note": "the highest possible identifier still fits in 29 bits", "kind": "JOIN", "address": "0x7FF", "endpoint": 63, "element": "0xFF", "can_id": "0x1FFFFFFF"}
+  ],
+
+  "identifier_refusals": [
+    {"note": "kind wider than 4 bits", "kind": 16, "address": "0x000", "endpoint": 0, "element": "0x00"},
+    {"note": "address wider than 11 bits", "kind": 0, "address": "0x800", "endpoint": 0, "element": "0x00"},
+    {"note": "endpoint wider than 6 bits", "kind": 0, "address": "0x000", "endpoint": 64, "element": "0x00"}
+  ],
+
+  "joins": [
+    {"note": "05 §4.2: K=1 is an ANNOUNCEMENT", "short_id": "0xA1B2C3", "announce": true, "can_id": "0x1FA1B2C3"},
+    {"note": "05 §4.2: K=0 is an ASSIGNMENT, and wins arbitration", "short_id": "0xA1B2C3", "announce": false, "can_id": "0x1EA1B2C3"},
+    {"note": "only 24 bits of ShortId travel in the identifier", "short_id": "0xF5DB8A7E", "announce": true, "can_id": "0x1FDB8A7E"}
+  ],
+
+  "headers": [
+    {"tid": 1, "result": "OK", "byte": "0x01"},
+    {"tid": 5, "result": "BUSY", "byte": "0x45"},
+    {"tid": 3, "result": "SEGMENTED", "byte": "0x5B"},
+    {"tid": 7, "result": "UNAVAILABLE", "byte": "0x67"}
+  ],
+
+  "values": [
+    {"note": "u16 goes low byte first", "type": "u16", "value": 300, "bytes": "2C01"},
+    {"type": "u32", "value": 16909060, "bytes": "04030201"},
+    {"note": "a negative i16 comes back negative", "type": "i16", "value": -1, "bytes": "FFFF"},
+    {"note": "the same pattern is absent in u16", "type": "u16", "value": null, "bytes": "FFFF"},
+    {"note": "absent in i16 is 0080, not FFFF", "type": "i16", "value": null, "bytes": "0080"},
+    {"type": "i8", "value": -127, "bytes": "81"},
+    {"note": "right next to the absent pattern", "type": "i16", "value": -32767, "bytes": "0180"},
+    {"type": "i32", "value": -2, "bytes": "FEFFFFFF"},
+    {"type": "i32", "value": null, "bytes": "00000080"},
+    {"type": "u8", "value": null, "bytes": "FF"},
+    {"note": "zero is NOT absent", "type": "u8", "value": 0, "bytes": "00"},
+    {"type": "bool", "value": 1, "bytes": "01"},
+    {"type": "bool", "value": null, "bytes": "FF"},
+    {"type": "enum8", "value": 2, "bytes": "02"},
+    {"type": "enum16", "value": null, "bytes": "FFFF"},
+    {"note": "a bit field has no absent — all ones is a value", "type": "map8", "value": 255, "bytes": "FF"},
+    {"type": "map16", "value": 65535, "bytes": "FFFF"},
+    {"type": "map32", "value": 1, "bytes": "01000000"},
+    {"type": "u32", "value": null, "bytes": "FFFFFFFF"}
+  ],
+
+  "value_refusals": [
+    {"note": "a bit field cannot encode absent", "type": "map8", "value": null},
+    {"note": "a wrong length on decode is a refusal", "type": "u16", "bytes": "01"},
+    {"type": "u16", "bytes": "010203"},
+    {"type": "u8", "bytes": ""}
+  ],
+
+  "ranges": [
+    {"type": "i8", "lo": -127, "hi": 127},
+    {"type": "i16", "lo": -32767, "hi": 32767},
+    {"type": "u8", "lo": 0, "hi": 254},
+    {"type": "u16", "lo": 0, "hi": 65534},
+    {"type": "map8", "lo": 0, "hi": 255},
+    {"type": "map16", "lo": 0, "hi": 65535},
+    {"note": "the C library's cap, not the spec's 0xFFFFFFFE — see zadania/FEAT-03.md", "type": "u32", "lo": 0, "hi": 2147483647}
+  ],
+
+  "in_range": [
+    {"type": "bool", "value": 1, "fits": true},
+    {"type": "bool", "value": 2, "fits": false},
+    {"type": "bool", "value": null, "fits": true},
+    {"type": "map8", "value": null, "fits": false},
+    {"type": "i8", "value": -128, "fits": false},
+    {"type": "u8", "value": 255, "fits": false}
+  ],
+
+  "short_ids": [
+    {"note": "CRC-32 of the Uid (types/0x0001-device.md §2.1), from zlib", "uid": "A1B2C3D400010203", "short_id": "0xF5DB8A7E"}
+  ],
+
+  "blobs": [
+    {"data": "A1B2C3D400010203", "bytes": "0800A1B2C3D400010203"},
+    {"data": "", "bytes": "0000"}
+  ],
+
+  "blob_refusals": [
+    {"note": "the prefix lies — refused, not patched up", "bytes": "0900A1B2C3D400010203"},
+    {"note": "too short for a prefix", "bytes": "08"}
+  ]
+}

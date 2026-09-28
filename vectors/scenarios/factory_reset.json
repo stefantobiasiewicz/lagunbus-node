@@ -1,0 +1,24 @@
+{
+  "about": "FactoryReset (types/0x0001-device.md §3.3): refused without the LAGN magic; acknowledged from the old address, carried out 50 ms later. Without a restart hook the node forgets its address, restores the system settings and joins again; the Device event sequence goes on.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 50, "note": "a changed Diagnostics setting, to see it restored", "rx": ["0A1081F8#013C00"], "expect": ["0E1081F8#01"]},
+    {"at": 100, "note": "wrong magic", "rx": ["06108002#0100000000"], "expect": ["0E108002#31"]},
+    {"at": 110, "note": "too short", "rx": ["06108002#024E4741"], "expect": ["0E108002#32"]},
+    {"at": 200, "note": "LAGN, little-endian", "rx": ["06108002#034E47414C"], "expect": ["0E108002#03"],
+     "store": {"address": "4200"}},
+    {"at": 249},
+    {"at": 250, "note": "done: no address, next announcement at 250 + 1500 % 1000", "store": {"address": "0000"}},
+    {"at": 300, "note": "the old address is not ours any more", "rx": ["0C108001#01"]},
+    {"at": 750, "expect": ["1FDB8A7E#7E8ADBF501"]},
+    {"at": 800, "note": "a new address; Booted carries sequence 1", "rx": ["1EDB8A7E#7E8ADBF54300"],
+     "expect": ["0210C001#010000010000"], "store": {"address": "4300"}},
+    {"at": 810, "note": "ReportInterval of Diagnostics is back at its default", "rx": ["0C10C1F8#02"],
+     "expect": ["0E10C1F8#022C01"]}
+  ]
+}

@@ -1,0 +1,57 @@
+/* Time, non-volatile storage and randomness — everything the library needs from
+ * the system it runs on.
+ *
+ * Three things, because that is exactly how many cannot be written portably.
+ * Everything else in `c/lagunbus/` is plain C and compiles anywhere.
+ */
+#ifndef LAGUNBUS_PLATFORM_H
+#define LAGUNBUS_PLATFORM_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct lb_platform {
+    /** Milliseconds since start. Must increase monotonically and **must not step
+     * backwards** when the clock is set — transaction deadlines are derived from
+     * it (04-interakcje.md §2.1). */
+    uint32_t (*millis)(void *ctx);
+
+    /** Store persistently. `false` means "it did not work", and the node has to
+     * survive that: it keeps running, and after a restart it comes back to
+     * whatever was stored earlier. */
+    bool (*store)(void *ctx, const char *key, const void *data, size_t len);
+
+    /** Load persisted data. `false` means "not there" — which is the normal state
+     * on first boot, not a fault. */
+    bool (*load)(void *ctx, const char *key, void *out, size_t len);
+
+    /** Random number.
+     *
+     * This is here for a specific reason, not for completeness: **the delay before
+     * announcing must be random**. Without it, forty nodes coming back after a power
+     * cut announce themselves in the same millisecond, collide on the bus and retry —
+     * just as much in unison (03-adresacja.md §5).
+     */
+    uint32_t (*random)(void *ctx);
+
+    /** Restart the node. Optional, and on the board it does not return.
+     *
+     * Needed by `FactoryReset`: most configuration lives only in RAM and returns to its
+     * defaults exactly by restarting (types/0x0001-device.md §3.3). `NULL` — a test, the
+     * host binary — makes the library do what it can without one: forget the address
+     * and go back to joining, leaving the endpoints' settings as they are. */
+    void (*restart)(void *ctx);
+
+    void *ctx;
+} lb_platform_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* LAGUNBUS_PLATFORM_H */

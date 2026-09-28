@@ -1,0 +1,45 @@
+{
+  "about": "The key profile of devices/apps/key (types/0x0010-key-input.md). Invert is on, so a HIGH pin is a released key. DebounceTime 15 ms, HoldThreshold 500, HoldTickInterval 200, MultiClickWindow 350. Every event carries the endpoint's own sequence number first.",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 10, "note": "pressed", "pin": false},
+    {"at": 24, "note": "not yet stable for 15 ms"},
+    {"at": 25, "note": "Down", "expect": ["02108401#00"]},
+    {"at": 100, "pin": true},
+    {"at": 115, "note": "Up after 90 ms, then Click x1", "expect": ["02108402#015A00", "02108403#0201"]},
+    {"at": 120, "note": "PressCount", "rx": ["0C108400#01"], "expect": ["0E108400#0101000000"]},
+
+    {"at": 1000, "pin": false},
+    {"at": 1015, "expect": ["02108401#03"]},
+    {"at": 1514},
+    {"at": 1515, "note": "HoldStart at 500 ms", "expect": ["02108405#04"]},
+    {"at": 1714},
+    {"at": 1715, "note": "HoldTick with the time held so far", "expect": ["02108406#05BC02"]},
+    {"at": 1800, "pin": true},
+    {"at": 1815, "note": "a hold is not a click: Up and HoldEnd, no Click",
+     "expect": ["02108402#062003", "02108407#072003"]},
+
+    {"at": 2000, "note": "EventMode = MULTICLICK", "rx": ["0A108411#0101"], "expect": ["0E108411#01"]},
+    {"at": 3000, "pin": false},
+    {"at": 3015, "expect": ["02108401#08"]},
+    {"at": 3050, "pin": true},
+    {"at": 3065, "note": "no Click yet — the window is open", "expect": ["02108402#093200"]},
+    {"at": 3100, "pin": false},
+    {"at": 3115, "expect": ["02108401#0A"]},
+    {"at": 3150, "pin": true},
+    {"at": 3165, "expect": ["02108402#0B3200"]},
+    {"at": 3514},
+    {"at": 3515, "note": "the window closes 350 ms after the last release: Click x2", "expect": ["02108403#0C02"]},
+
+    {"at": 5000, "note": "bounce: pressed, released, pressed again", "pin": false},
+    {"at": 5005, "pin": true},
+    {"at": 5010, "pin": false},
+    {"at": 5024},
+    {"at": 5025, "note": "15 ms after the LAST change", "expect": ["02108401#0D"]}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "about": "A node with a stored address announces Booted at start and answers reads of Device (types/0x0001-device.md): Uid in segments (05-mapowanie-can.md §6), the rest in a single RESPONSE. Frames not meant for it are ignored.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200", "boot": "0400"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 0, "store": {"boot": "0500"}},
+    {"at": 10, "note": "BootCount", "rx": ["0C108011#01"], "expect": ["0E108011#010500"]},
+    {"at": 20, "note": "Uid: SEGMENTED, then the blob 0800+Uid in two segments, LAST on the second",
+     "rx": ["0C108000#03"],
+     "expect": ["0E108000#5B", "12108000#03000800A1B2C3D4", "12108000#830100010203"]},
+    {"at": 30, "note": "DeviceType", "rx": ["0C108002#04"], "expect": ["0E108002#042000"]},
+    {"at": 40, "note": "EndpointCount — functional endpoints only", "rx": ["0C108007#05"], "expect": ["0E108007#0501"]},
+    {"at": 12345, "note": "Uptime in whole seconds", "rx": ["0C108010#06"], "expect": ["0E108010#060C000000"]},
+    {"at": 12350, "note": "LastReset", "rx": ["0C108012#07"], "expect": ["0E108012#0700"]},
+    {"at": 12360, "note": "FirmwareVersion", "rx": ["0C108004#00"], "expect": ["0E108004#0000010000"]},
+    {"at": 12370, "note": "ProtocolVersion, HardwareVersion, VendorId",
+     "rx": ["0C108003#01", "0C108005#02", "0C108006#03"],
+     "expect": ["0E108003#010100", "0E108005#020100", "0E108006#030000"]},
+    {"at": 12380, "note": "an element Device does not have", "rx": ["0C108008#01"], "expect": ["0E108008#11"]},
+    {"at": 12390, "note": "the common TypeId of ep0", "rx": ["0C1080F0#01"], "expect": ["0E1080F0#010100"]},
+    {"at": 12400, "note": "another address, an empty payload, a REPORT and an EVENT at ours: all silence",
+     "rx": ["0C10C001#01", "0C108001", "10108400#01", "02108001#00"]}
+  ]
+}
