@@ -1,0 +1,42 @@
+{
+  "about": "Profile `key_fixed`: KeyInput with HOLD and MULTICLICK that exposes only EventMode and HoldEnabled. Its timings are its own (lb_key_config_t): HoldThreshold 800, HoldTickInterval 400, MultiClickWindow 250, MaxClicks 2 — not the type's recommended values, so a scenario shows they are the device's (types/0x0010-key-input.md §2.4). Response header = result << 3 | Tid.",
+  "profile": "key_fixed",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "HoldThreshold: the feature is declared, the attribute not exposed",
+     "rx": ["0C108415#01"], "expect": ["0E108415#11"]},
+    {"at": 110, "note": "EventMode = RAW without the RAW feature", "rx": ["0A108411#0202"], "expect": ["0E108411#32"]},
+    {"at": 120, "note": "HoldEnabled is there — the hub decides on use", "rx": ["0C108414#03"], "expect": ["0E108414#0301"]},
+
+    {"at": 1000, "pin": false},
+    {"at": 1015},
+    {"at": 1514, "note": "500 ms would be the type's recommendation — not this device's"},
+    {"at": 1814},
+    {"at": 1815, "note": "HoldStart at the device's own 800 ms", "expect": ["02108405#00"]},
+    {"at": 2214},
+    {"at": 2215, "note": "HoldTick every 400 ms", "expect": ["02108406#01B004"]},
+    {"at": 2300, "pin": true},
+    {"at": 2315, "expect": ["02108407#021405"]},
+
+    {"at": 2500, "note": "EventMode = MULTICLICK", "rx": ["0A108411#0401"], "expect": ["0E108411#04"]},
+    {"at": 3000, "pin": false},
+    {"at": 3015},
+    {"at": 3050, "pin": true},
+    {"at": 3065},
+    {"at": 3100, "pin": false},
+    {"at": 3115},
+    {"at": 3150, "pin": true},
+    {"at": 3165, "note": "the device's MaxClicks is 2: Click x2 at once", "expect": ["02108403#0302"]},
+
+    {"at": 4000, "pin": false},
+    {"at": 4015},
+    {"at": 4050, "pin": true},
+    {"at": 4065},
+    {"at": 4314},
+    {"at": 4315, "note": "the device's window is 250 ms", "expect": ["02108403#0401"]}
+  ]
+}

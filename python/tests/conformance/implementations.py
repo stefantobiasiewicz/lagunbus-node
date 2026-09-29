@@ -15,10 +15,11 @@ from typing import Protocol
 from lagunbus_node import frame, values
 from lagunbus_node.endpoint import Endpoint
 from lagunbus_node.frame import Frame
-from lagunbus_node.key import Key
 from lagunbus_node.memory import MemoryPlatform, QueueTransport
 from lagunbus_node.node import Node
-from lagunbus_node.output import Output
+from lagunbus_node.tools.debounce import Debounce
+from lagunbus_node.types.key import Key, KeyConfig
+from lagunbus_node.types.output import Output
 from lagunbus_node.values import Value, ValueType
 from tests.conformance import profiles
 
@@ -121,8 +122,18 @@ class PyDevice:
         self.profile = profile
         self._driven: int | None = None
         self.endpoint: Endpoint
+        self.key_config: KeyConfig | None = None
         if profile == "key":
             self.endpoint = profiles.key_endpoint()
+            self.key_config = KeyConfig()
+            device_type = 0x0010
+        elif profile == "bell":
+            self.endpoint = profiles.bell_endpoint()
+            self.key_config = KeyConfig()
+            device_type = 0x0010
+        elif profile == "key_fixed":
+            self.endpoint = profiles.key_fixed_endpoint()
+            self.key_config = profiles.KEY_FIXED_CONFIG
             device_type = 0x0010
         elif profile == "output":
             self.endpoint = profiles.output_endpoint()
@@ -133,6 +144,7 @@ class PyDevice:
             self.bus, self.platform, profiles.identity(device_type, uid), [self.endpoint]
         )
         self.key: Key | None = None
+        self.debounce: Debounce | None = None
         self.output: Output | None = None
 
     def _drive(self, level: bool) -> None:
@@ -149,8 +161,10 @@ class PyDevice:
 
     def start(self, pin: bool) -> None:
         self.node.start()
-        if self.profile == "key":
-            self.key = Key(self.endpoint, pin, self.platform.clock)
+        if self.key_config is not None:
+            pressed = not pin  # the board's key shorts to ground
+            self.debounce = Debounce(pressed, self.platform.clock)
+            self.key = Key(self.endpoint, self.key_config, pressed, self.platform.clock)
         else:
             output = Output(self.node, self.endpoint, self._drive)
             self.endpoint.on_command = lambda _ep, element, _args: output.command(element)
@@ -161,8 +175,9 @@ class PyDevice:
 
     def loop(self, pin: bool) -> None:
         self.node.tick()
-        if self.key is not None:
-            self.key.update(self.node, pin, self.platform.clock)
+        if self.key is not None and self.debounce is not None:
+            stable = self.debounce.update(not pin, self.platform.clock, profiles.KEY_DEBOUNCE_MS)
+            self.key.update(self.node, stable, self.platform.clock)
         if self.output is not None:
             self.output.tick(self.platform.clock)
 

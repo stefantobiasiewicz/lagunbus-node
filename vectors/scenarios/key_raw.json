@@ -1,0 +1,46 @@
+{
+  "about": "The key profile of devices/apps/key (types/0x0010-key-input.md), mode RAW, hold switched off, and the 60 s cap on HoldTick. Invert is on, so a HIGH pin is a released key. DebounceTime 15 ms, HoldThreshold 500, HoldTickInterval 200. Every event carries the endpoint's own sequence number first.",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "EventMode = RAW", "rx": ["0A108411#0102"], "expect": ["0E108411#01"]},
+
+    {"at": 1000, "note": "bounce: pressed, released, pressed again", "pin": false},
+    {"at": 1005, "pin": true},
+    {"at": 1010, "pin": false},
+    {"at": 1024},
+    {"at": 1025, "note": "Down 15 ms after the LAST change", "expect": ["02108401#00"]},
+    {"at": 1100, "pin": true},
+    {"at": 1115, "note": "Up with the time held, and no Click", "expect": ["02108402#015A00"]},
+
+    {"at": 2000, "note": "hold works in RAW too", "pin": false},
+    {"at": 2015, "expect": ["02108401#02"]},
+    {"at": 2514},
+    {"at": 2515, "note": "HoldStart at 500 ms", "expect": ["02108405#03"]},
+    {"at": 2715, "expect": ["02108406#04BC02"]},
+    {"at": 2800, "pin": true},
+    {"at": 2815, "note": "the release is ONE event: HoldEnd, no Up", "expect": ["02108407#052003"]},
+
+    {"at": 3000, "note": "HoldEnabled = 0", "rx": ["0A108414#0200"], "expect": ["0E108414#02"]},
+    {"at": 3001, "note": "EventMode = CLICK", "rx": ["0A108411#0300"], "expect": ["0E108411#03"]},
+    {"at": 4000, "pin": false},
+    {"at": 4015},
+    {"at": 9015, "note": "five seconds down, and no hold"},
+    {"at": 9100, "pin": true},
+    {"at": 9115, "note": "without hold a long press is still a click", "expect": ["02108403#0601"]},
+
+    {"at": 10000, "note": "HoldEnabled = 1", "rx": ["0A108414#0401"], "expect": ["0E108414#04"]},
+    {"at": 11000, "note": "a key stuck down", "pin": false},
+    {"at": 11015},
+    {"at": 11515, "expect": ["02108405#07"]},
+    {"at": 70000, "note": "a tick at 58 985 ms held", "expect": ["02108406#0869E6"]},
+    {"at": 71015, "note": "60 s held: HoldTick stops"},
+    {"at": 75000, "note": "and stays stopped"},
+    {"at": 76000, "pin": true},
+    {"at": 76015, "note": "HoldEnd still comes, with the time held (65 000 ms)", "expect": ["02108407#09E8FD"]}
+  ]
+}

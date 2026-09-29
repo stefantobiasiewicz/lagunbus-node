@@ -8,7 +8,7 @@ from lagunbus_node.faults import Faults, FaultyTransport
 from lagunbus_node.frame import Frame
 from lagunbus_node.memory import MemoryPlatform, QueueTransport
 from lagunbus_node.node import Node
-from lagunbus_node.output import Output
+from lagunbus_node.types.output import Output
 from tests.conformance import profiles
 
 UID = bytes.fromhex("A1B2C3D400010203")

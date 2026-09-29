@@ -1,0 +1,18 @@
+{
+  "about": "The key profile of devices/apps/key, started with the key already held down (Invert on, so a LOW pin is a pressed key). That press began before the node was watching: no hold, no Click, not even on its release. The next press is an ordinary one.",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 600, "note": "past HoldThreshold, and no HoldStart"},
+    {"at": 2000, "pin": true},
+    {"at": 2015, "note": "the release of a press never seen: nothing"},
+    {"at": 3000, "pin": false},
+    {"at": 3015},
+    {"at": 3050, "pin": true},
+    {"at": 3065, "note": "the next press is an ordinary click", "expect": ["02108403#0001"]}
+  ]
+}

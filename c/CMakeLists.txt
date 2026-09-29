@@ -21,8 +21,9 @@ set(LAGUNBUS_SOURCES
     lagunbus/src/values.c
     lagunbus/src/endpoint.c
     lagunbus/src/node.c
-    lagunbus/src/key.c
-    lagunbus/src/output.c
+    lagunbus/src/tools/debounce.c
+    lagunbus/src/types/key.c
+    lagunbus/src/types/output.c
 )
 
 add_library(lagunbus STATIC ${LAGUNBUS_SOURCES})

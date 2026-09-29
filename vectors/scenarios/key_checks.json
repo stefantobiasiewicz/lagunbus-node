@@ -1,0 +1,17 @@
+{
+  "about": "Writes to KeyInput checked against the TYPE's table, not only the value type (types/0x0010-key-input.md §2.2), and refused whole: a refused value never lands (LB-NODE-026). The endpoint's `on_check` hook, filled by `lb_key_check`. Response header = result << 3 | Tid.",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "HoldThreshold = 10 fits a u16, not 200-3000 ms: INVALID_VALUE",
+     "rx": ["0A108415#020A00"], "expect": ["0E108415#32"]},
+    {"at": 110, "note": "and the old value stayed", "rx": ["0C108415#03"], "expect": ["0E108415#03F401"]},
+    {"at": 120, "note": "MaxClicks = 9 is outside 2-5", "rx": ["0A108413#0409"], "expect": ["0E108413#34"]},
+    {"at": 130, "note": "an in-range value goes through", "rx": ["0A108415#055802"], "expect": ["0E108415#05"]},
+    {"at": 140, "rx": ["0C108415#06"], "expect": ["0E108415#065802"]}
+  ]
+}

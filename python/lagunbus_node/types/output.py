@@ -1,6 +1,6 @@
 """A driven output — type 0x0020 Output, the variant without dimming.
 
-The Python twin of `c/lagunbus/src/output.c`. The logic lives here, driving the pin
+The Python twin of `c/lagunbus/src/types/output.c`. The logic lives here, driving the pin
 lives in the device — a callback, as in C.
 """
 

@@ -46,6 +46,29 @@ typedef uint8_t (*lb_command_fn)(struct lb_endpoint *self, uint8_t element,
 typedef uint8_t (*lb_write_fn)(struct lb_endpoint *self, uint8_t element,
                                lb_value_t value);
 
+/** A check BEFORE a write lands. Returns a result code; anything but `LB_RESULT_OK`
+ * refuses the write and the old value stays.
+ *
+ * The generic write knows only the value type — that a `u16` fits in 16 bits. The
+ * type's own table (`HoldThreshold` 200–3000 ms) and rules between attributes and
+ * features (`EventMode = RAW` needs `RAW`) belong to the type, so the type supplies
+ * them here. It has to run before the value lands, not in `on_write`: a write is whole
+ * or not at all (04-interakcje.md §4, LB-NODE-026), and a refusal after the fact would
+ * leave the refused value in place.
+ */
+typedef uint8_t (*lb_check_fn)(const struct lb_endpoint *self, uint8_t element,
+                               lb_value_t value);
+
+/** The features an element of the TYPE needs, or 0 when the type does not know it.
+ *
+ * Needed for one answer: an element the type defines but whose feature this endpoint
+ * does not declare is `UNSUPPORTED_FEATURE`, not `UNSUPPORTED_ELEMENT`
+ * (04-interakcje.md §9, LB-NODE-061). The attribute array cannot tell — a device
+ * simply does not list what it lacks — so the type answers. Any one bit of the mask
+ * is enough (`[MULTICLICK, RAW]`, 01-model-danych.md §8).
+ */
+typedef uint16_t (*lb_feature_fn)(uint8_t element);
+
 typedef struct lb_endpoint {
     uint8_t   number;
     uint16_t  type_id;
@@ -65,6 +88,8 @@ typedef struct lb_endpoint {
 
     lb_command_fn on_command;
     lb_write_fn   on_write;
+    lb_check_fn   on_check;    /**< optional; NULL = the value type is the only check */
+    lb_feature_fn feature_of;  /**< optional; NULL = no element is feature-bound */
     void         *ctx;
 } lb_endpoint_t;
 

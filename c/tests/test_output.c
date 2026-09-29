@@ -1,5 +1,5 @@
 /* The output: commands, behaviour after a restart, auto-off, reports. */
-#include "lagunbus/output.h"
+#include "lagunbus/types/output.h"
 #include "lagunbus/registry.h"
 #include "mock.h"
 #include "lb_test.h"

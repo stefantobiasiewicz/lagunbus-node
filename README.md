@@ -70,7 +70,7 @@ python3 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"
 ```
 
 The package `lagunbus_node` is a port of the C library, **module for module**: `frame`,
-`values`, `endpoint`, `node`, `key`, `output`, the two interfaces in `interfaces`, and
+`values`, `endpoint`, `node`, `tools.debounce`, `types.key`, `types.output`, the two interfaces in `interfaces`, and
 `registry` generated. It has exactly the C library's scope. A feature the C side lacks is
 missing here too, and a new one goes into both in one change. On top of that it has two
 things a simulator needs and firmware does not:
@@ -83,6 +83,20 @@ things a simulator needs and firmware does not:
 The Python code keeps C's fixed widths on purpose: counters wrap at their C width, and
 time is arithmetic modulo 2³² as `millis()` is in C. Where C does something because of its
 types, Python copies it, and says so. One such case is `u32` capped at `INT32_MAX` — see below.
+
+## Tools and types
+
+The library is split by what a piece IS, the same way in both languages:
+
+| | C (`c/lagunbus/`) | Python (`python/lagunbus_node/`) | what |
+|---|---|---|---|
+| core | `include/lagunbus/*.h`, `src/*.c` | `*.py` | frame, values, endpoint, node, the two interfaces — every node needs them |
+| `tools/` | `…/tools/debounce.h` | `tools/debounce.py` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike) |
+| `types/` | `…/types/key.h`, `…/types/output.h` | `types/key.py`, `types/output.py` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
+
+Include as `"lagunbus/types/key.h"`, import as `from lagunbus_node.types import key`.
+A new type goes to `types/`, a helper that no type owns to `tools/`
+(`zadania/CR-01.md`, step 6).
 
 ## Holding the two together
 
@@ -97,8 +111,11 @@ The conformance tests run **in one process**. The C library is built a second ti
 Python calls through `ctypes`. No `vcan0`, so they run on macOS, where development
 happens. Every test is parametrised `[python]` / `[c]`, so a failure names the side.
 
-A **scenario** is a device profile (`key` or `output`, attribute for attribute as in
-`devices/apps/`), a starting store, and steps. Each step sets the clock, hands the node
+A **scenario** is a device profile, a starting store, and steps. The profiles live in
+`c/tests/harness.c` and `python/tests/conformance/profiles.py`: `output` (as
+`devices/apps/output`), and three keys — `key` (every feature, every timing tunable),
+`bell` (no features, no attributes) and `key_fixed` (`HOLD` and `MULTICLICK` with the
+device's own timings). Each step sets the clock, hands the node
 frames, and runs one turn of the application loop. What the node sent must match
 `expect` exactly, one extra frame included:
 
@@ -142,6 +159,40 @@ write is refused.
 in `vectors/codec.json` → `ranges` changes with them: it records the cap on purpose,
 so that the conformance tests fail the moment one side lifts it alone.
 
+### `KeyInput` is a set of tools, not a key (2026-09-29)
+
+The library gives a device the pieces of a key and leaves the decisions to it
+(`zadania/CR-01.md`, N6, K1–K5). `key.h` lists them: attribute rows `LB_KEY_ATTR_…` for
+the attributes the device chooses to expose, the endpoint hooks `lb_key_check` and
+`lb_key_feature_of`, the event state machine `lb_key_t`, and `lb_key_emit_…` for a device
+with its own logic. Bounce is a separate, type-free tool (`debounce.h`); polarity is the
+device's alone.
+
+**Why.** The spec made bounce and polarity matters of how a device is built, and made
+every timing optional (`types/0x0010-key-input.md` §1, §2.4). A library that read them
+from attributes could not serve a device that does not expose them; one that hid the
+state machine behind a single call could not serve a device with its own. What the
+device does not expose comes from its `lb_key_config_t`.
+
+**Two hooks in `lb_endpoint_t`**, both optional, for every type to use:
+
+- `on_check` runs **before** a write lands. Until now a write checked only the value
+  type — `HoldThreshold = 10` fitted a `u16` and was taken, although the type allows
+  200–3000 ms — and a refusal in `on_write` came after the value had landed, so the
+  write was not whole (LB-NODE-026). `lb_key_check` holds the type's ranges and the rule
+  that `EventMode` takes only a mode whose feature is declared.
+- `feature_of` maps an element of the type to its features, so that one outside the
+  declared features answers `UNSUPPORTED_FEATURE`, not `UNSUPPORTED_ELEMENT`
+  (LB-NODE-061). The attribute array cannot tell: a device simply does not list what it
+  lacks. The gate comes before the array, so the declaration decides, not the listing.
+
+**One choice of this implementation, not of the type:** a press already on at start
+produces nothing, its release included (`silent_start_press`, on by default). The spec
+leaves such cases to the device (CR-01 N1b).
+
+**Pinned by** `vectors/scenarios/key_checks.json`, `key_bell.json`, `key_fixed.json`,
+next to the behaviour scenarios `key.json`, `key_raw.json`, `key_held_at_start.json`.
+
 ## The registry
 
 ```sh
@@ -155,7 +206,8 @@ still carries Polish names, and the generator holds the translation table. It mu
 the one in `hub/tools/generate_registry.py`, and an unknown name fails on purpose.
 
 The endpoint catalogue (`types/*.md`) is prose, so attribute numbers are hand-copied in
-`key.h`/`key.py` and `output.h`/`output.py`. A type change means both, plus a scenario.
+`types/key.h`/`types/key.py` and `types/output.h`/`types/output.py`. A type change means
+both, plus a scenario.
 
 ## What is not here yet
 

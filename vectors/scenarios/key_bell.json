@@ -1,0 +1,23 @@
+{
+  "about": "Profile `bell`: a KeyInput with NO features and NO attributes — the doorbell from types/0x0010-key-input.md §1. The core alone: Click(1) on release, however long the press. An element of the type outside the declared features answers UNSUPPORTED_FEATURE; one the type does not know, or an optional one not exposed, UNSUPPORTED_ELEMENT (04-interakcje.md §9). Response header = result << 3 | Tid.",
+  "profile": "bell",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 10, "note": "pressed", "pin": false},
+    {"at": 25},
+    {"at": 1000, "note": "a second held, and no hold — the bell has no HOLD"},
+    {"at": 1100, "pin": true},
+    {"at": 1115, "note": "one Click, however long the press", "expect": ["02108403#0001"]},
+    {"at": 1200, "note": "EventMode: an element of the type, feature not declared",
+     "rx": ["0C108411#01"], "expect": ["0E108411#19"]},
+    {"at": 1210, "note": "HoldThreshold: the same", "rx": ["0C108415#02"], "expect": ["0E108415#1A"]},
+    {"at": 1220, "note": "PressCount: optional, not feature-bound, not exposed",
+     "rx": ["0C108400#03"], "expect": ["0E108400#13"]},
+    {"at": 1230, "note": "0x10 was DebounceTime and is no element of the type now",
+     "rx": ["0C108410#04"], "expect": ["0E108410#14"]}
+  ]
+}

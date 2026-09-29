@@ -46,6 +46,23 @@ static bool is_common(const lb_endpoint_t *endpoint, uint8_t element,
     }
 }
 
+/** `UNSUPPORTED_FEATURE` for an element of the type outside the declared features.
+ *
+ * Checked before the array, so the answer is the same whether or not the device
+ * happens to list the attribute: what decides is the declaration, not the array.
+ */
+static uint8_t feature_gate(const lb_endpoint_t *endpoint, uint8_t element)
+{
+    if (endpoint->feature_of == NULL) {
+        return LB_RESULT_OK;
+    }
+    uint16_t needs = endpoint->feature_of(element);
+    if (needs != 0 && (endpoint->features & needs) == 0) {
+        return LB_RESULT_UNSUPPORTED_FEATURE;
+    }
+    return LB_RESULT_OK;
+}
+
 uint8_t lb_endpoint_read(lb_endpoint_t *endpoint, uint8_t element,
                          uint8_t *out, uint8_t cap, uint8_t *len)
 {
@@ -61,6 +78,10 @@ uint8_t lb_endpoint_read(lb_endpoint_t *endpoint, uint8_t element,
         return *len ? LB_RESULT_OK : LB_RESULT_FAILURE;
     }
 
+    uint8_t gate = feature_gate(endpoint, element);
+    if (gate != LB_RESULT_OK) {
+        return gate;
+    }
     lb_attr_t *attr = lb_endpoint_attr(endpoint, element);
     if (attr == NULL) {
         return LB_RESULT_UNSUPPORTED_ELEMENT;
@@ -86,6 +107,10 @@ uint8_t lb_endpoint_write(lb_endpoint_t *endpoint, uint8_t element,
         return LB_RESULT_READ_ONLY;
     }
 
+    uint8_t gate = feature_gate(endpoint, element);
+    if (gate != LB_RESULT_OK) {
+        return gate;
+    }
     lb_attr_t *attr = lb_endpoint_attr(endpoint, element);
     if (attr == NULL) {
         return LB_RESULT_UNSUPPORTED_ELEMENT;
@@ -102,6 +127,12 @@ uint8_t lb_endpoint_write(lb_endpoint_t *endpoint, uint8_t element,
     }
     if (!lb_in_range(attr->type, value)) {
         return LB_RESULT_INVALID_VALUE;
+    }
+    if (endpoint->on_check != NULL) {
+        uint8_t verdict = endpoint->on_check(endpoint, element, value);
+        if (verdict != LB_RESULT_OK) {
+            return verdict; /* refused whole — the old value stays */
+        }
     }
 
     attr->value = value;

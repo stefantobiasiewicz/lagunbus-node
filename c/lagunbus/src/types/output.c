@@ -1,4 +1,4 @@
-#include "lagunbus/output.h"
+#include "lagunbus/types/output.h"
 
 #include "lagunbus/registry.h"
 

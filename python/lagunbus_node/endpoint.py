@@ -43,6 +43,14 @@ reaction belongs to the endpoint: `OnOff` has to flip the relay, `DebounceTime` 
 do nothing at all.
 """
 
+CheckFn = Callable[["Endpoint", int, Value], int]
+"""A check BEFORE a write lands; anything but OK refuses it whole — see `lb_check_fn`
+in endpoint.h."""
+
+FeatureFn = Callable[[int], int]
+"""The features an element of the type needs, 0 when the type does not know it — see
+`lb_feature_fn` in endpoint.h."""
+
 
 @dataclass
 class Endpoint:
@@ -58,6 +66,8 @@ class Endpoint:
 
     on_command: CommandFn | None = None
     on_write: WriteFn | None = None
+    on_check: CheckFn | None = None
+    feature_of: FeatureFn | None = None
 
     def attr(self, element: int) -> Attr | None:
         for a in self.attrs:
@@ -78,11 +88,24 @@ class Endpoint:
             return ValueType.U8, self.channel
         return None
 
+    def _feature_gate(self, element: int) -> int:
+        """`UNSUPPORTED_FEATURE` for an element of the type outside the declared
+        features — decided by the declaration, not by the list (endpoint.c)."""
+        if self.feature_of is None:
+            return ResultCode.OK
+        needs = self.feature_of(element)
+        if needs and not self.features & needs:
+            return ResultCode.UNSUPPORTED_FEATURE
+        return ResultCode.OK
+
     def read(self, element: int) -> tuple[int, bytes]:
         """`(result code, value bytes)`."""
         common = self._common(element)
         if common is not None:
             return ResultCode.OK, values.encode(*common)
+        gate = self._feature_gate(element)
+        if gate != ResultCode.OK:
+            return gate, b""
         a = self.attr(element)
         if a is None:
             return ResultCode.UNSUPPORTED_ELEMENT, b""
@@ -98,6 +121,9 @@ class Endpoint:
         """Write an attribute. Checks access, type and range — in that order."""
         if self._common(element) is not None:
             return ResultCode.READ_ONLY  # TypeId and friends describe the device
+        gate = self._feature_gate(element)
+        if gate != ResultCode.OK:
+            return gate
         a = self.attr(element)
         if a is None:
             return ResultCode.UNSUPPORTED_ELEMENT
@@ -110,6 +136,10 @@ class Endpoint:
             return ResultCode.INVALID_VALUE
         if not values.in_range(a.type, value):
             return ResultCode.INVALID_VALUE
+        if self.on_check is not None:
+            verdict = self.on_check(self, element, value)
+            if verdict != ResultCode.OK:
+                return verdict  # refused whole — the old value stays
         a.value = value
         if self.on_write is not None:
             return self.on_write(self, element, value)

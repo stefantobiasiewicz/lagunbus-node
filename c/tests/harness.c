@@ -19,9 +19,10 @@
  *
  * This is test code: it allocates, which the library itself never does.
  */
-#include "lagunbus/key.h"
+#include "lagunbus/tools/debounce.h"
+#include "lagunbus/types/key.h"
 #include "lagunbus/node.h"
-#include "lagunbus/output.h"
+#include "lagunbus/types/output.h"
 #include "lagunbus/registry.h"
 
 #include <stdlib.h>
@@ -46,6 +47,10 @@ typedef struct lbh {
     lb_attr_t      attrs[10];
     bool           is_key;
     lb_key_t       key;
+    lb_key_config_t key_config;
+    lb_debounce_t  debounce;
+    uint32_t       debounce_ms;
+    bool           active_low;  /**< the key shorts to ground: a LOW pin is a press */
     lb_output_t    output;
     int            driven;   /**< the last level the output drove; -1 before any */
 
@@ -146,27 +151,74 @@ static uint8_t h_command(lb_endpoint_t *self, uint8_t element, const uint8_t *ar
     return lb_output_command(&h->output, element);
 }
 
+/* The key profiles share the board: a key shorted to ground (a LOW pin is a press),
+ * filtered for 15 ms. Both are the DEVICE's decisions, made here as an application
+ * makes them, and not attributes (types/0x0010-key-input.md §5.7). */
+static void key_board(lbh_t *h)
+{
+    h->key_config = (lb_key_config_t)LB_KEY_CONFIG_DEFAULT;
+    h->debounce_ms = 15;
+    h->active_low = true;
+    h->node.identity.device_type = 0x0010;
+    h->is_key = true;
+}
+
+/** Everything: all three features, every timing tunable from the hub. */
 static void profile_key(lbh_t *h)
 {
     const lb_attr_t attrs[] = {
-        {LB_KEY_PRESS_COUNT,        LB_T_U32,   LB_RO,              LB_NUM(0)},
-        {LB_KEY_DEBOUNCE_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(15)},
-        {LB_KEY_EVENT_MODE,         LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_KEY_MODE_CLICK)},
-        {LB_KEY_MULTI_CLICK_WINDOW, LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(350)},
-        {LB_KEY_MAX_CLICKS,         LB_T_U8,    LB_RW | LB_PERSIST, LB_NUM(3)},
-        {LB_KEY_HOLD_ENABLED,       LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(1)},
-        {LB_KEY_HOLD_THRESHOLD,     LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(500)},
-        {LB_KEY_HOLD_TICK_INTERVAL, LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
-        {LB_KEY_INVERT,             LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(1)},
+        LB_KEY_ATTR_PRESS_COUNT(),
+        LB_KEY_ATTR_EVENT_MODE(),
+        LB_KEY_ATTR_MULTI_CLICK_WINDOW(350),
+        LB_KEY_ATTR_MAX_CLICKS(3),
+        LB_KEY_ATTR_HOLD_ENABLED(),
+        LB_KEY_ATTR_HOLD_THRESHOLD(500),
+        LB_KEY_ATTR_HOLD_TICK_INTERVAL(200),
     };
     memcpy(h->attrs, attrs, sizeof attrs);
     h->endpoint = (lb_endpoint_t){
-        .number = 4, .type_id = LB_TYPE_KEYINPUT, .revision = 1, .features = 0,
+        .number = 4, .type_id = LB_TYPE_KEYINPUT, .revision = 1,
+        .features = LB_KEY_F_MULTICLICK | LB_KEY_F_HOLD | LB_KEY_F_RAW,
         .channel = 1, .attrs = h->attrs,
         .attr_count = (uint8_t)(sizeof attrs / sizeof attrs[0]),
+        .on_check = lb_key_check, .feature_of = lb_key_feature_of,
     };
-    h->node.identity.device_type = 0x0010;
-    h->is_key = true;
+    key_board(h);
+}
+
+/** A doorbell: no features, no attributes — the core alone. */
+static void profile_bell(lbh_t *h)
+{
+    h->endpoint = (lb_endpoint_t){
+        .number = 4, .type_id = LB_TYPE_KEYINPUT, .revision = 1, .features = 0,
+        .channel = 1, .attrs = h->attrs, .attr_count = 0,
+        .on_check = lb_key_check, .feature_of = lb_key_feature_of,
+    };
+    key_board(h);
+}
+
+/** HOLD and MULTICLICK, but the timings are the device's own: the hub may switch the
+ * mode and hold on or off, and tune nothing. Values unlike the type's recommendations,
+ * so that the scenario shows whose they are. */
+static void profile_key_fixed(lbh_t *h)
+{
+    const lb_attr_t attrs[] = {
+        LB_KEY_ATTR_EVENT_MODE(),
+        LB_KEY_ATTR_HOLD_ENABLED(),
+    };
+    memcpy(h->attrs, attrs, sizeof attrs);
+    h->endpoint = (lb_endpoint_t){
+        .number = 4, .type_id = LB_TYPE_KEYINPUT, .revision = 1,
+        .features = LB_KEY_F_HOLD | LB_KEY_F_MULTICLICK,
+        .channel = 1, .attrs = h->attrs,
+        .attr_count = (uint8_t)(sizeof attrs / sizeof attrs[0]),
+        .on_check = lb_key_check, .feature_of = lb_key_feature_of,
+    };
+    key_board(h);
+    h->key_config.hold_threshold_ms = 800;
+    h->key_config.hold_tick_ms = 400;
+    h->key_config.multi_click_window_ms = 250;
+    h->key_config.max_clicks = 2;
 }
 
 static void profile_output(lbh_t *h)
@@ -214,6 +266,10 @@ lbh_t *lbh_create(const char *profile, const uint8_t *uid, uint32_t jitter)
 
     if (strcmp(profile, "key") == 0) {
         profile_key(h);
+    } else if (strcmp(profile, "bell") == 0) {
+        profile_bell(h);
+    } else if (strcmp(profile, "key_fixed") == 0) {
+        profile_key_fixed(h);
     } else if (strcmp(profile, "output") == 0) {
         profile_output(h);
     } else {
@@ -248,7 +304,9 @@ void lbh_start(lbh_t *h, bool pin)
 {
     if (h->is_key) {
         lb_node_start(&h->node);
-        lb_key_init(&h->key, &h->endpoint, pin, h->clock);
+        bool pressed = h->active_low ? !pin : pin;
+        lb_debounce_init(&h->debounce, pressed, h->clock);
+        lb_key_init(&h->key, &h->endpoint, &h->key_config, pressed, h->clock);
     } else {
         lb_node_start(&h->node);
         lb_output_init(&h->output, &h->node, &h->endpoint, h_drive, h);
@@ -272,7 +330,9 @@ void lbh_loop(lbh_t *h, bool pin)
 {
     lb_node_tick(&h->node);
     if (h->is_key) {
-        lb_key_update(&h->key, &h->node, pin, h->clock);
+        bool pressed = h->active_low ? !pin : pin;
+        bool stable = lb_debounce_update(&h->debounce, pressed, h->clock, h->debounce_ms);
+        lb_key_update(&h->key, &h->node, stable, h->clock);
     } else {
         lb_output_tick(&h->output, h->clock);
     }
