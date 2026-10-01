@@ -1,0 +1,16 @@
+{
+  "about": "output made with three channels (`channels`): relays on endpoints 4 … 6, each as devices/apps/output — Invert on, so off drives the pin HIGH. A command to endpoint 6 moves the third relay only. The default — one relay — is output.json.",
+  "profile": "output",
+  "channels": 3,
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 0, "note": "all off: every pin HIGH", "driven": [1, 1, 1]},
+    {"at": 100, "note": "Toggle endpoint 6 -> on", "rx": ["06108602#01"],
+     "expect": ["10108600#01", "0E108602#01"], "driven": [1, 1, 0]},
+    {"at": 200, "note": "no endpoint 7", "rx": ["0C108700#02"], "expect": ["0E108700#0A"]}
+  ]
+}

@@ -554,7 +554,7 @@ int main(void)
     {
         lb_node_start(&fresh);
         LB_ASSERT(m2.sent == 0);
-        LB_ASSERT(fresh.join_backoff_s == 1); /* but it scheduled an announcement */
+        LB_ASSERT(fresh.join_backoff_s == 2); /* but it scheduled one, in the 0…2 s window */
         LB_ASSERT(fresh.join_attempts == 0);
     }
 
@@ -599,12 +599,26 @@ int main(void)
         LB_ASSERT(z->data[4] == LB_CLASS_CONTROL);
     }
 
-    LB_TEST("each attempt is rarer than the last — the hub may be off for hours");
+    LB_TEST("after an announcement, 500 ms for the assignment whatever the draw");
     {
-        uint16_t first = fresh.join_backoff_s;
+        /* With a draw of 0 the delay is 0 — the wait is what keeps the bus quiet. */
+        uint32_t kept = m2.jitter;
+        m2.jitter = 0;
         m2.clock = fresh.next_join_ms;
         lb_node_tick(&fresh);
-        LB_ASSERT(fresh.join_backoff_s > first);
+        LB_ASSERT(fresh.next_join_ms - m2.clock == 500u);
+        m2.jitter = kept; /* the tests below share this platform */
+    }
+
+    LB_TEST("past the fifth attempt the windows grow — the hub may be off for hours");
+    {
+        uint16_t first = fresh.join_backoff_s;
+        LB_ASSERT(first == 2);
+        while (fresh.join_attempts < 10) {
+            m2.clock = fresh.next_join_ms;
+            lb_node_tick(&fresh);
+        }
+        LB_ASSERT(fresh.join_backoff_s == 60);
     }
 
     LB_TEST("somebody else’s assignment is passed over in silence");

@@ -1,7 +1,7 @@
 [project]
 name = "lagunbus-node"
 version = "0.5.0"
-description = "LagunBus node library — the Python twin of the C library in ../c"
+description = "LagunBus node library, Python side — the C node through ctypes, frame codec, faults, transports"
 requires-python = ">=3.12"
 dependencies = []
 
@@ -15,6 +15,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["lagunbus_node*"]
+
+# Typed (mypy --strict) and used from another project (lagun-sim), so it says so.
+[tool.setuptools.package-data]
+lagunbus_node = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

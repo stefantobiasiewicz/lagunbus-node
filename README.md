@@ -1,28 +1,33 @@
 # lagunbus-node
 
-The LagunBus **node library**, in two languages: C for firmware, Python for simulators
-and tools. It implements [`lagunbus-spec`](../lagunbus-spec/) from the node's side. The
-hub ([`../hub/`](../hub/)) is the other side of the contract and shares no code with it.
+The LagunBus **node library**. The node is written in C — one implementation, the one
+that goes onto a board and the one a simulator runs. Python has the tools around it: the
+C node behind `ctypes`, the frame codec, a fault overlay and transports for a computer.
+It implements [`lagunbus-spec`](../lagunbus-spec/) from the node's side. The hub
+([`../hub/`](../hub/)) is the other side of the contract and shares no code with it.
 
 The library knows nothing about hardware. Boards live in [`../devices/`](../devices/),
 which takes the C library as a submodule and adds only the glue: the ESP32-C3 port, the
 `key` and `output` applications, the ESP-IDF container and the flashing scripts.
 
 Why this is a repository of its own, and what was decided along the way, is written in
-[`zadania/zrobione/FEAT-03.md`](../zadania/zrobione/FEAT-03.md).
+[`zadania/zrobione/FEAT-03.md`](../zadania/zrobione/FEAT-03.md); why the node is in C
+alone — [`zadania/zrobione/FEAT-02.md`](../zadania/zrobione/FEAT-02.md) and § Decisions below.
 
 ```
   lagunbus-spec ──── registry/*.yaml
         │
         ▼
   lagunbus-node/
-  ├── c/          the C library — ESP-IDF component, POSIX port, tests, lagun-node
-  ├── python/     the Python library — same concepts, same two interfaces
-  ├── vectors/    codec vectors and behaviour scenarios, as DATA, read by both
+  ├── c/          the node — ESP-IDF component, POSIX port, tests, lagun-node,
+  │               and sim/: the catalogue of simulated devices behind a flat API
+  ├── python/     the tools around the node — `sim` (the C node through ctypes),
+  │               frame codec, faults, transports
+  ├── vectors/    codec vectors and behaviour scenarios, as DATA
   └── tools/      one registry generator, two outputs (.h and .py)
         │                    │
         ▼                    ▼
-  devices/ (submodule)       simulator (zadania/FEAT-02.md)
+  devices/ (submodule)       lagun-sim (zadania/zrobione/FEAT-02.md)
 ```
 
 > **TODO:** this repository exists only locally — there is no GitHub repository yet.
@@ -56,79 +61,85 @@ ctest --test-dir build --output-on-failure      # `-R key` for one test
 | `c/lagunbus/` | the library, **and** an ESP-IDF component (`CMakeLists.txt` with `idf_component_register`). A firmware project points `EXTRA_COMPONENT_DIRS` at this directory |
 | `c/ports/posix/` | the reference port: SocketCAN, a clock, files. Builds everywhere; opens a bus only on Linux |
 | `c/lagun-node/` | a node over SocketCAN, plus `--sniff` to watch traffic through our own codec |
-| `c/tests/` | unit tests with a clock driven from the test, and `harness.c` for the conformance tests |
-| `c/CMakeLists.txt` | the native build: static library, tests, `lagun-node`, `liblagunbus_harness` |
+| `c/sim/` | the catalogue of simulated devices (`devices.c`) and a flat API over the node for `ctypes` (`sim.h` says why) — the port a simulator and the conformance tests use |
+| `c/tests/` | unit tests with a clock driven from the test |
+| `c/CMakeLists.txt` | the native build: static library, tests, `lagun-node`, `liblagunbus_sim` |
 
 ## Python
 
 ```sh
 cd python
 python3 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"
-.venv/bin/python -m pytest -q                    # unit + conformance; builds the C harness itself
+.venv/bin/python -m pytest -q                    # builds liblagunbus_sim itself (cmake)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 .venv/bin/mypy lagunbus_node tests               # strict
 ```
 
-The package `lagunbus_node` is a port of the C library, **module for module**: `frame`,
-`values`, `endpoint`, `node`, `tools.debounce`, `types.key`, `types.output`, the two interfaces in `interfaces`, and
-`registry` generated. It has exactly the C library's scope. A feature the C side lacks is
-missing here too, and a new one goes into both in one change. On top of that it has two
-things a simulator needs and firmware does not:
+The package `lagunbus_node` has **no node** (§ Decisions). It has what a simulator and
+the tests need around one:
 
-- `memory` — an in-memory bus and platform with a clock set by hand;
-- `faults` — an **overlay on the transport** that loses responses and segments, falls
-  silent, and answers `BUSY` in the node's name. The node has no hook for it; every
-  fault can be told from the frames alone.
+| module | what |
+|---|---|
+| `sim` | the C node through `ctypes`: `devices()` lists the catalogue, `SimDevice` is one device — clock, store, frames in and out, pins, outputs. Builds `liblagunbus_sim` with CMake on first use and whenever a source is newer; `LAGUNBUS_SIM=/path/to/lib` loads a given file instead. Needs the source tree (`pip install -e`), a C compiler and CMake |
+| `frame` | the frame codec — identifiers, headers, joins. The traffic log and the fault overlay read frames with it, and it is the one piece checked against C |
+| `faults` | an **overlay on the transport** that loses responses and segments, falls silent, and answers `BUSY` in the node's name. The node has no hook for it; every fault can be told from the frames alone |
+| `ports` | transports for a computer: `socketcan` (Linux, `vcan0` or a real interface) and `udp` (multicast on this machine, the other end of `lagun-hub run --udp` — § Decisions) |
+| `interfaces`, `memory` | the `Transport` protocol, and a `QueueTransport` whose two ends a test holds |
+| `registry` | generated — see below |
 
-The Python code keeps C's fixed widths on purpose: counters wrap at their C width, and
-time is arithmetic modulo 2³² as `millis()` is in C. Where C does something because of its
-types, Python copies it, and says so. One such case is `u32` capped at `INT32_MAX` — see below.
+A simulator pumps a `SimDevice` itself: frames from its `Transport` (through `faults`,
+if it wants them) into `rx`, one `loop` per turn with the clock set, `take_tx` back out.
 
 ## Tools and types
 
-The library is split by what a piece IS, the same way in both languages:
+The C library is split by what a piece IS:
 
-| | C (`c/lagunbus/`) | Python (`python/lagunbus_node/`) | what |
-|---|---|---|---|
-| core | `include/lagunbus/*.h`, `src/*.c` | `*.py` | frame, values, endpoint, node, the two interfaces — every node needs them |
-| `tools/` | `…/tools/debounce.h` | `tools/debounce.py` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike) |
-| `types/` | `…/types/key.h`, `…/types/output.h` | `types/key.py`, `types/output.py` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
+| | `c/lagunbus/` | what |
+|---|---|---|
+| core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
+| `tools/` | `…/tools/debounce.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike) |
+| `types/` | `…/types/key.h`, `…/types/output.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
-Include as `"lagunbus/types/key.h"`, import as `from lagunbus_node.types import key`.
-A new type goes to `types/`, a helper that no type owns to `tools/`
-(`zadania/CR-01.md`, step 6).
+Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
+owns to `tools/` (`zadania/zrobione/CR-01.md`, step 6).
 
-## Holding the two together
+## Tests
 
 | level | what | where |
 |---|---|---|
 | unit, C | the library, a clock driven from the test, no bus | `c/tests/` — `ctest` |
-| unit, Python | what only Python has: the fault overlay, the registry check | `python/tests/` |
-| **conformance** | the SAME data through both: `vectors/codec.json` and every `vectors/scenarios/*.json` | `python/tests/conformance/` |
+| unit, Python | the tools: fault overlay (on the C node), transports, the `sim` binding, the registry check | `python/tests/` |
+| **conformance** | `vectors/codec.json` and every `vectors/scenarios/*.json`, as DATA | `python/tests/conformance/` |
 
-The conformance tests run **in one process**. The C library is built a second time as
-`liblagunbus_harness`, a shared library with a small flat API (`c/tests/harness.c`) that
-Python calls through `ctypes`. No `vcan0`, so they run on macOS, where development
-happens. Every test is parametrised `[python]` / `[c]`, so a failure names the side.
+The conformance tests run **in one process**, through `lagunbus_node.sim`. No `vcan0`,
+so they run on macOS, where development happens. The frame codec exists in both
+languages, so the identifier, header and join vectors are parametrised `[python]` /
+`[c]`; values, blobs, ShortId and every scenario run through C alone.
 
-A **scenario** is a device profile, a starting store, and steps. The profiles live in
-`c/tests/harness.c` and `python/tests/conformance/profiles.py`: `output` (as
-`devices/apps/output`), and three keys — `key` (every feature, every timing tunable),
-`bell` (no features, no attributes) and `key_fixed` (`HOLD` and `MULTICLICK` with the
-device's own timings). Each step sets the clock, hands the node
-frames, and runs one turn of the application loop. What the node sent must match
-`expect` exactly, one extra frame included:
+A **scenario** is a device from the catalogue (`c/sim/devices.c`), a starting store, and
+steps. The catalogue is the simulator's too, so every device `lagun-sim` offers is one a
+scenario checks: `key` (every feature, every timing tunable), `bell` (no features, no
+attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings),
+`panel3` (three keys), `output` (as `devices/apps/output`), `output2` and `output8`
+(outputs that keep their own state). `key` and `output` also come in 1 … 8 channels
+(`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
+one, the board they copy, is the default. Each step sets the clock, hands the node frames,
+sets the input pins (`pin` — one level, or a list for several inputs), and runs one turn
+of the board's loop. What the node sent must match `expect` exactly, one extra frame
+included:
 
 ```json
 {"at": 100, "note": "Toggle -> on", "rx": ["06108402#01"],
  "expect": ["10108400#01", "0E108402#01"], "driven": 0}
 ```
 
-Frames are written as `candump` writes them, `IDENTIFIER#DATA`. A divergence between the
-two libraries is worth having. It means one of them is wrong, or the spec can be read two
-ways, and it goes to a decision straight away (`zadania/README.md`).
+Frames are written as `candump` writes them, `IDENTIFIER#DATA`. A scenario that fails
+means the node is wrong or the spec can be read two ways; the second goes to a decision
+straight away (`zadania/README.md`).
 
-Adding behaviour: write the scenario first, see it fail in both, make both pass.
+Adding behaviour: write the scenario first, see it fail, make it pass. Adding a device:
+a function and a line in `c/sim/devices.c`, and a scenario for it — for one that comes
+in sizes, a scenario with more than one channel too.
 
 ## Decisions
 
@@ -136,7 +147,7 @@ Adding behaviour: write the scenario first, see it fail in both, make both pass.
 
 The spec gives `u32` the range `0 … 0xFFFFFFFE`. This library accepts a **write** of a
 `u32` attribute only up to `0x7FFFFFFF`; above that the node answers `INVALID_VALUE`.
-A deliberate cut, in both languages alike.
+A deliberate cut.
 
 **Why.** A value lives in `lb_value_t`, an `int32_t` with an "absent" flag — one type for
 every scalar, so an attribute array is uniform and `lb_in_range` is a single comparison.
@@ -155,14 +166,14 @@ through the raw bits: a `u32` counter (`Uptime`, `PressCount`, `TxFrames`) goes 
 write is refused.
 
 **When to revisit.** With the first writable `u32` attribute whose values can exceed
-2³¹ − 1 (a meter preset, say). Then both libraries change together, and the `u32` entry
-in `vectors/codec.json` → `ranges` changes with them: it records the cap on purpose,
-so that the conformance tests fail the moment one side lifts it alone.
+2³¹ − 1 (a meter preset, say). Then the `u32` entry in `vectors/codec.json` → `ranges`
+changes with the library: it records the cap on purpose, so that lifting it is a
+visible decision and not a side effect.
 
 ### `KeyInput` is a set of tools, not a key (2026-09-29)
 
 The library gives a device the pieces of a key and leaves the decisions to it
-(`zadania/CR-01.md`, N6, K1–K5). `key.h` lists them: attribute rows `LB_KEY_ATTR_…` for
+(`zadania/zrobione/CR-01.md`, N6, K1–K5). `key.h` lists them: attribute rows `LB_KEY_ATTR_…` for
 the attributes the device chooses to expose, the endpoint hooks `lb_key_check` and
 `lb_key_feature_of`, the event state machine `lb_key_t`, and `lb_key_emit_…` for a device
 with its own logic. Bounce is a separate, type-free tool (`debounce.h`); polarity is the
@@ -193,6 +204,67 @@ leaves such cases to the device (CR-01 N1b).
 **Pinned by** `vectors/scenarios/key_checks.json`, `key_bell.json`, `key_fixed.json`,
 next to the behaviour scenarios `key.json`, `key_raw.json`, `key_held_at_start.json`.
 
+### The node is in C alone; Python is the tools around it (2026-09-30)
+
+Until this date the node existed twice, in C and in Python, module for module, held
+together by the conformance tests (`zadania/zrobione/FEAT-03.md`, N7). The Python node
+was built for one user — the simulator. `zadania/zrobione/FEAT-02.md` (N10, N11) reversed that:
+the simulator runs **the C library**, through `ctypes`, and the Python node went.
+
+**Why.** A simulator is worth most when it runs the code that goes onto a board: then
+running the hub against it checks the firmware too, not a twin of it. A second node
+cost every change twice (`zadania/zrobione/CR-01.md` changed the key in both), for one
+benefit — an independent second reading of the spec. That reading still exists: the hub
+is written separately, from the other side of the contract, with a node double of its
+own in its tests.
+
+**What made it cheap.** The conformance harness already drove the C node with no
+callbacks into Python — clock, store and queues on the C side, Python setting the clock
+and moving frames. Generalised into `c/sim/`, it serves a simulator as it is, and the
+fault overlay works on the C node unchanged, because every frame passes through Python.
+
+**What stayed in Python** is what is not the node: the frame codec (kept in both, and
+still checked against C), the fault overlay, the transports, the registry, and `sim`.
+
+**The catalogue is shared.** `c/sim/devices.c` is both the simulator's list of devices
+and the scenarios' profiles — one list, so that nothing the simulator offers goes
+unchecked.
+
+### UDP multicast as a bus for simulated nodes (2026-09-30)
+
+`lagunbus_node.ports.udp` and the hub's `lagunhub/protocol/bus/udp.py` carry CAN frames
+between processes on one machine: the hub and simulated nodes (`lagun-sim`,
+`zadania/zrobione/FEAT-02.md`) where there is no CAN, macOS above all. **Test and development
+only** — the hub opens it only with `lagun-hub run --udp`, never from `hub.yaml`.
+
+The two sides are written separately and share no code, so this is the one description
+of the format. Every datagram is one frame, 24 bytes:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 4 | magic `LBU1` — LagunBus over UDP, version 1 |
+| 4 | 4 | sender — a random u32 per open port, little-endian |
+| 8 | 16 | `struct can_frame` in the SocketCAN layout: id with `CAN_EFF_FLAG`, length, 3 bytes of padding, 8 bytes of data — all little-endian |
+
+Group `239.255.76.66`, port `7607` by default; TTL 0 and the loopback interface, so
+nothing leaves the machine. Anything else arriving in the group — a wrong size, a
+foreign magic, a length past 8 — is dropped, not fatal.
+
+**Why multicast.** Every process joins the group and hears every other one — a cable,
+with no broker to start first and no order to start in. A Unix socket cannot multicast,
+so it would need a broker process.
+
+**Why `sender`.** A process hears its own datagrams back from the group. SocketCAN does
+not give a socket its own frames, and the node must not see its own; `sender` is how
+each side drops them.
+
+**What it does not do: arbitrate.** Frames arrive in the order they were sent, not by
+identifier. Enough for running things together; arbitration is tested on the hub's
+`VirtualBus`, which does fake it.
+
+**Pinned by** the same byte vector in `python/tests/test_ports.py` and
+`hub/tests/test_udp_bus.py` — a change on one side alone fails the other.
+
 ## The registry
 
 ```sh
@@ -206,13 +278,12 @@ still carries Polish names, and the generator holds the translation table. It mu
 the one in `hub/tools/generate_registry.py`, and an unknown name fails on purpose.
 
 The endpoint catalogue (`types/*.md`) is prose, so attribute numbers are hand-copied in
-`types/key.h`/`types/key.py` and `types/output.h`/`types/output.py`. A type change means
-both, plus a scenario.
+`types/key.h` and `types/output.h`. A type change means those, plus a scenario.
 
 ## What is not here yet
 
-Missing in **both** languages. Moved here from `devices/README.md`, because none of it is
-about hardware.
+Missing in the node. Moved here from `devices/README.md`, because none of it is about
+hardware.
 
 **Transactions on the node side:**
 
@@ -228,12 +299,13 @@ about hardware.
 already persistent):
 
 - persistent attributes. Settings are meant to survive a power cut, and today every one
-  returns to its default (zadania/CR-01.md);
+  returns to its default (zadania/TASK-01.md);
 - `Reboot` (today `UNSUPPORTED_ELEMENT`) and `Identify` ("which box is it").
   `FactoryReset` is done: acknowledged from the old address and carried out 50 ms later.
   The address is stored as none, then `restart` runs (on the board `esp_restart()`).
-  Without a restart hook (host, tests, the Python default) the node only drops the
-  address and the system settings and rejoins;
+  Without a restart hook (host, tests) the node only drops the address and the system
+  settings and rejoins. The simulator has one (`lbs_allow_restart`): the node stops
+  after the reset and `lagun-sim` boots a new one from the store;
 - the firmware version in `Booted`: raising it should cause re-enumeration, a restart
   without a change should not.
 

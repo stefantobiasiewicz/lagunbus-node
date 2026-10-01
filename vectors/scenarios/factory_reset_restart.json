@@ -1,0 +1,16 @@
+{
+  "about": "FactoryReset on a device with a restart (types/0x0001-device.md §3.3), as a board with esp_restart() is: acknowledged from the old address, 50 ms later the address is stored as none and the restart runs — and nothing more comes from that node; what follows is a new boot. The path without a restart: factory_reset.json.",
+  "profile": "output",
+  "restart": true,
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 200, "note": "LAGN, little-endian", "rx": ["06108002#034E47414C"], "expect": ["0E108002#03"]},
+    {"at": 249, "restarted": false},
+    {"at": 250, "note": "the address stored as none, the restart asked for — and no announcement from this boot",
+     "store": {"address": "0000"}, "restarted": true}
+  ]
+}

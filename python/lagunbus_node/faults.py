@@ -3,7 +3,7 @@
 A node that always behaves will not exercise half of a hub: transaction retries,
 noticing silence, discarding a broken segment run. `hub/tests/node/faults.py` gives its
 node double exactly these four faults, and a simulator needs the same ones
-(zadania/FEAT-02.md).
+(zadania/zrobione/FEAT-02.md).
 
 They live **between the node and the bus**, not inside the node, and that is the whole
 design (zadania/zrobione/FEAT-03.md):
@@ -73,9 +73,9 @@ class FaultyTransport:
         self._address: Callable[[], int] = lambda: ADDRESS_UNASSIGNED
 
     def attach(self, clock: Callable[[], int], address: Callable[[], int]) -> None:
-        """Tell the overlay the node's time and address — `attach(node.now, lambda:
-        node.address)`. Until then silence is measured from 0 and no request is
-        recognised as the node's."""
+        """Tell the overlay the node's time and address — for a `sim.SimDevice`,
+        `attach(lambda: now_ms, lambda: device.address)`. Until then silence is
+        measured from 0 and no request is recognised as the node's."""
         self._clock = clock
         self._address = address
 

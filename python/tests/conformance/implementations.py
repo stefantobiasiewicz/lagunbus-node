@@ -1,58 +1,96 @@
-"""The two implementations behind one interface, so a test does not know which it drives.
+"""The implementations behind the interfaces the conformance tests are written against.
 
-`Codec` and `Device` are what every conformance test is written against. There are two
-of each: `Py*` over the Python library, `C*` over `liblagunbus_harness` through
-`ctypes`. A test parametrised over both runs the same data through both, and any
-difference in output is a failure — of one library, or of the spec's wording.
+**The frame codec** exists twice — `lagunbus_node.frame` in Python (the fault overlay,
+the transports and the simulator's traffic log need it) and the C library — so the
+identifier, header and join vectors run through both, and a difference is a failure of
+one of them or of the spec's wording.
+
+**Everything else** — values, blobs, ShortId and the node itself — exists only in C
+since zadania/zrobione/FEAT-02.md N11: the node is in C, the tools around it in Python. Those
+vectors and every scenario run through the C library alone, reached through
+`lagunbus_node.sim` (`liblagunbus_sim` and `ctypes`).
 """
 
 from __future__ import annotations
 
 import ctypes
-from pathlib import Path
+from enum import Enum
 from typing import Protocol
 
-from lagunbus_node import frame, values
-from lagunbus_node.endpoint import Endpoint
+from lagunbus_node import frame, sim
 from lagunbus_node.frame import Frame
-from lagunbus_node.memory import MemoryPlatform, QueueTransport
-from lagunbus_node.node import Node
-from lagunbus_node.tools.debounce import Debounce
-from lagunbus_node.types.key import Key, KeyConfig
-from lagunbus_node.types.output import Output
-from lagunbus_node.values import Value, ValueType
-from tests.conformance import profiles
 
-# --- the interface ------------------------------------------------------------------
+Value = int | None
+"""A scalar value as the vectors write it; `None` is "absent" (02-typy-danych.md §1.3)."""
 
 
-class Codec(Protocol):
+class ValueType(Enum):
+    """Scalar types from 02-typy-danych.md §1, **in the order of `lb_type_t`** — the
+    position is the number passed to C. `size` lets a test notice a reordering."""
+
+    BOOL = "bool"
+    U8 = "u8"
+    U16 = "u16"
+    U32 = "u32"
+    I8 = "i8"
+    I16 = "i16"
+    I32 = "i32"
+    ENUM8 = "enum8"
+    ENUM16 = "enum16"
+    MAP8 = "map8"
+    MAP16 = "map16"
+    MAP32 = "map32"
+
+    @property
+    def size(self) -> int:
+        return _SIZES[self]
+
+
+_SIZES = {
+    ValueType.BOOL: 1,
+    ValueType.U8: 1,
+    ValueType.U16: 2,
+    ValueType.U32: 4,
+    ValueType.I8: 1,
+    ValueType.I16: 2,
+    ValueType.I32: 4,
+    ValueType.ENUM8: 1,
+    ValueType.ENUM16: 2,
+    ValueType.MAP8: 1,
+    ValueType.MAP16: 2,
+    ValueType.MAP32: 4,
+}
+
+
+# --- the interfaces ------------------------------------------------------------------
+
+
+class FrameCodec(Protocol):
+    """What both languages have."""
+
     def encode_id(self, kind: int, address: int, endpoint: int, element: int) -> int | None: ...
     def decode_id(self, can_id: int) -> tuple[int, int, int, int]: ...
     def join_id(self, short_id: int, announce: bool) -> int: ...
     def encode_header(self, tid: int, result: int) -> int: ...
     def decode_header(self, byte: int) -> tuple[int, int]: ...
-    def encode(self, t: ValueType, value: Value) -> bytes | None: ...
-    def decode(self, t: ValueType, data: bytes) -> tuple[Value] | None: ...
-    def lo(self, t: ValueType) -> int: ...
-    def hi(self, t: ValueType) -> int: ...
-    def in_range(self, t: ValueType, value: Value) -> bool: ...
-    def short_id(self, uid: bytes) -> int: ...
-    def encode_blob(self, data: bytes) -> bytes | None: ...
-    def decode_blob(self, data: bytes) -> bytes | None: ...
 
 
 class Device(Protocol):
-    """A node with one of the two profiles, a clock and a store the test controls."""
+    """A node with one of the catalogue's devices, a clock and a store the test
+    controls. `pins` is the mask of input levels, bit i for input i."""
 
     def set_clock(self, ms: int) -> None: ...
     def store_put(self, key: str, data: bytes) -> None: ...
     def store_get(self, key: str) -> bytes | None: ...
-    def start(self, pin: bool) -> None: ...
+    def start(self, pins: int) -> None: ...
     def rx(self, f: Frame) -> None: ...
-    def loop(self, pin: bool) -> None: ...
+    def loop(self, pins: int) -> None: ...
     def take_tx(self) -> list[Frame]: ...
-    def driven(self) -> int | None: ...
+    def allow_restart(self) -> None: ...
+    def restart_requested(self) -> bool: ...
+    def driven(self, index: int = 0) -> int | None:
+        """The last level output `index` drove, or `None` before any."""
+        ...
 
 
 # --- Python -------------------------------------------------------------------------
@@ -78,115 +116,6 @@ class PyCodec:
     def decode_header(self, byte: int) -> tuple[int, int]:
         return frame.decode_header(byte)
 
-    def encode(self, t: ValueType, value: Value) -> bytes | None:
-        try:
-            return values.encode(t, value)
-        except ValueError:
-            return None
-
-    def decode(self, t: ValueType, data: bytes) -> tuple[Value] | None:
-        try:
-            return (values.decode(t, data),)
-        except ValueError:
-            return None
-
-    def lo(self, t: ValueType) -> int:
-        return values.lo(t)
-
-    def hi(self, t: ValueType) -> int:
-        return values.hi(t)
-
-    def in_range(self, t: ValueType, value: Value) -> bool:
-        return values.in_range(t, value)
-
-    def short_id(self, uid: bytes) -> int:
-        return Node(QueueTransport(), MemoryPlatform(), profiles.identity(0, uid)).short_id()
-
-    def encode_blob(self, data: bytes) -> bytes | None:
-        try:
-            return values.encode_blob(data)
-        except ValueError:
-            return None
-
-    def decode_blob(self, data: bytes) -> bytes | None:
-        try:
-            return values.decode_blob(data)
-        except ValueError:
-            return None
-
-
-class PyDevice:
-    def __init__(self, profile: str, uid: bytes, jitter: int) -> None:
-        self.bus = QueueTransport()
-        self.platform = MemoryPlatform(jitter=jitter)
-        self.profile = profile
-        self._driven: int | None = None
-        self.endpoint: Endpoint
-        self.key_config: KeyConfig | None = None
-        if profile == "key":
-            self.endpoint = profiles.key_endpoint()
-            self.key_config = KeyConfig()
-            device_type = 0x0010
-        elif profile == "bell":
-            self.endpoint = profiles.bell_endpoint()
-            self.key_config = KeyConfig()
-            device_type = 0x0010
-        elif profile == "key_fixed":
-            self.endpoint = profiles.key_fixed_endpoint()
-            self.key_config = profiles.KEY_FIXED_CONFIG
-            device_type = 0x0010
-        elif profile == "output":
-            self.endpoint = profiles.output_endpoint()
-            device_type = 0x0020
-        else:
-            raise ValueError(f"unknown profile {profile!r}")
-        self.node = Node(
-            self.bus, self.platform, profiles.identity(device_type, uid), [self.endpoint]
-        )
-        self.key: Key | None = None
-        self.debounce: Debounce | None = None
-        self.output: Output | None = None
-
-    def _drive(self, level: bool) -> None:
-        self._driven = 1 if level else 0
-
-    def set_clock(self, ms: int) -> None:
-        self.platform.clock = ms
-
-    def store_put(self, key: str, data: bytes) -> None:
-        self.platform.store(key, data)
-
-    def store_get(self, key: str) -> bytes | None:
-        return self.platform.stored.get(key)
-
-    def start(self, pin: bool) -> None:
-        self.node.start()
-        if self.key_config is not None:
-            pressed = not pin  # the board's key shorts to ground
-            self.debounce = Debounce(pressed, self.platform.clock)
-            self.key = Key(self.endpoint, self.key_config, pressed, self.platform.clock)
-        else:
-            output = Output(self.node, self.endpoint, self._drive)
-            self.endpoint.on_command = lambda _ep, element, _args: output.command(element)
-            self.output = output
-
-    def rx(self, f: Frame) -> None:
-        self.bus.inbox.append(f)
-
-    def loop(self, pin: bool) -> None:
-        self.node.tick()
-        if self.key is not None and self.debounce is not None:
-            stable = self.debounce.update(not pin, self.platform.clock, profiles.KEY_DEBOUNCE_MS)
-            self.key.update(self.node, stable, self.platform.clock)
-        if self.output is not None:
-            self.output.tick(self.platform.clock)
-
-    def take_tx(self) -> list[Frame]:
-        return self.bus.take()
-
-    def driven(self) -> int | None:
-        return self._driven
-
 
 # --- C, through ctypes --------------------------------------------------------------
 
@@ -209,12 +138,12 @@ class _Fields(ctypes.Structure):
 
 
 _C_TYPES = {t: i for i, t in enumerate(ValueType)}
-"""`lb_type_t` numbers. `ValueType` is declared in the order of the C enum —
-test_codec.py checks that the sizes agree, which would catch a reordering."""
+"""`lb_type_t` numbers — the position in `ValueType`."""
 
 
-def load_library(path: Path) -> ctypes.CDLL:
-    lib = ctypes.CDLL(str(path))
+def declare_codec(lib: ctypes.CDLL) -> ctypes.CDLL:
+    """Declare the library's own codec functions — `lagunbus_node.sim` declares only
+    its `lbs_…` API."""
     u8, u16, u32, b = ctypes.c_uint8, ctypes.c_uint16, ctypes.c_uint32, ctypes.c_bool
     ptr, i32, size = ctypes.c_void_p, ctypes.c_int32, ctypes.c_size_t
 
@@ -237,27 +166,6 @@ def load_library(path: Path) -> ctypes.CDLL:
     sig("lb_encode_blob", size, ctypes.c_char_p, size, ctypes.c_char_p, size)
     sig("lb_decode_blob", b, ptr, size, ctypes.POINTER(ptr), ctypes.POINTER(size))
 
-    sig("lbh_create", ptr, ctypes.c_char_p, ctypes.c_char_p, u32)
-    sig("lbh_destroy", None, ptr)
-    sig("lbh_set_clock", None, ptr, u32)
-    sig("lbh_store_put", b, ptr, ctypes.c_char_p, ctypes.c_char_p, u8)
-    sig("lbh_store_get", ctypes.c_int, ptr, ctypes.c_char_p, ctypes.c_char_p, u8)
-    sig("lbh_start", None, ptr, b)
-    sig("lbh_rx", None, ptr, u32, ctypes.c_char_p, u8)
-    sig("lbh_loop", None, ptr, b)
-    sig("lbh_tx_count", ctypes.c_int, ptr)
-    sig(
-        "lbh_tx_get",
-        None,
-        ptr,
-        ctypes.c_int,
-        ctypes.POINTER(u32),
-        ctypes.c_char_p,
-        ctypes.POINTER(u8),
-    )
-    sig("lbh_tx_clear", None, ptr)
-    sig("lbh_driven", ctypes.c_int, ptr)
-    sig("lbh_short_id", u32, ptr)
     return lib
 
 
@@ -323,11 +231,11 @@ class CCodec:
         return bool(self.lib.lb_in_range(_C_TYPES[t], _c_value(value)))
 
     def short_id(self, uid: bytes) -> int:
-        h = self.lib.lbh_create(b"output", uid, 0)
+        device = sim.SimDevice("output", uid)
         try:
-            return int(self.lib.lbh_short_id(h))
+            return device.short_id
         finally:
-            self.lib.lbh_destroy(h)
+            device.close()
 
     def encode_blob(self, data: bytes) -> bytes | None:
         buf = ctypes.create_string_buffer(len(data) + 2)
@@ -348,47 +256,37 @@ class CCodec:
 
 
 class CDevice:
-    def __init__(self, lib: ctypes.CDLL, profile: str, uid: bytes, jitter: int) -> None:
-        self.lib = lib
-        self.h = lib.lbh_create(profile.encode(), uid, jitter)
-        if not self.h:
-            raise ValueError(f"unknown profile {profile!r}")
+    """A `SimDevice` behind the test interface."""
 
-    def __del__(self) -> None:
-        if getattr(self, "h", None):
-            self.lib.lbh_destroy(self.h)
+    def __init__(self, profile: str, uid: bytes, jitter: int, channels: int = 0) -> None:
+        self.device = sim.SimDevice(profile, uid, jitter, channels)
 
     def set_clock(self, ms: int) -> None:
-        self.lib.lbh_set_clock(self.h, ms)
+        self.device.set_clock(ms)
 
     def store_put(self, key: str, data: bytes) -> None:
-        self.lib.lbh_store_put(self.h, key.encode(), data, len(data))
+        self.device.store_put(key, data)
 
     def store_get(self, key: str) -> bytes | None:
-        buf = ctypes.create_string_buffer(8)
-        n = self.lib.lbh_store_get(self.h, key.encode(), buf, 8)
-        return None if n < 0 else buf.raw[:n]
+        return self.device.store_get(key)
 
-    def start(self, pin: bool) -> None:
-        self.lib.lbh_start(self.h, pin)
+    def start(self, pins: int) -> None:
+        self.device.start(pins)
 
     def rx(self, f: Frame) -> None:
-        self.lib.lbh_rx(self.h, f.can_id, f.data, len(f.data))
+        self.device.rx(f)
 
-    def loop(self, pin: bool) -> None:
-        self.lib.lbh_loop(self.h, pin)
+    def loop(self, pins: int) -> None:
+        self.device.loop(pins)
 
     def take_tx(self) -> list[Frame]:
-        out: list[Frame] = []
-        can_id = ctypes.c_uint32()
-        length = ctypes.c_uint8()
-        buf = ctypes.create_string_buffer(8)
-        for i in range(self.lib.lbh_tx_count(self.h)):
-            self.lib.lbh_tx_get(self.h, i, ctypes.byref(can_id), buf, ctypes.byref(length))
-            out.append(Frame(int(can_id.value), buf.raw[: length.value]))
-        self.lib.lbh_tx_clear(self.h)
-        return out
+        return self.device.take_tx()
 
-    def driven(self) -> int | None:
-        level = int(self.lib.lbh_driven(self.h))
-        return None if level < 0 else level
+    def allow_restart(self) -> None:
+        self.device.allow_restart()
+
+    def restart_requested(self) -> bool:
+        return self.device.restart_requested
+
+    def driven(self, index: int = 0) -> int | None:
+        return self.device.driven(index)

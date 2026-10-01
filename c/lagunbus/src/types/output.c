@@ -4,8 +4,33 @@
 
 #include <string.h>
 
-/* The key in persistent storage — renamed from the Polish "wyjscie", see node.c. */
-#define NVS_KEY_OUTPUT "output"
+/* The key in persistent storage: "output" followed by the endpoint number — "output4",
+ * "output5", … One key PER OUTPUT: until 2026-09-30 every output shared the bare
+ * "output", so on a node with several of them each restored the state of whichever had
+ * switched last (zadania/zrobione/FEAT-02.md, F4; pinned by vectors/scenarios/output_channels.json).
+ *
+ * A node flashed with the old key does not find its stored state and comes up by
+ * `PowerOnBehaviour` as on a first boot — once. No fallback to the old key: it would
+ * be wrong for every output but one, and the price is a single switch-on.
+ *
+ * At most "output255", nine characters — well inside the 15 NVS allows. */
+#define STATE_KEY_LEN sizeof "output255"
+
+static void state_key(const lb_endpoint_t *endpoint, char out[STATE_KEY_LEN])
+{
+    static const char prefix[] = "output";
+    memcpy(out, prefix, sizeof prefix - 1);
+    size_t i = sizeof prefix - 1;
+    uint8_t n = endpoint->number;
+    if (n >= 100u) {
+        out[i++] = (char)('0' + n / 100u);
+    }
+    if (n >= 10u) {
+        out[i++] = (char)('0' + n / 10u % 10u);
+    }
+    out[i++] = (char)('0' + n % 10u);
+    out[i] = '\0';
+}
 
 static int32_t setting(lb_endpoint_t *ep, uint8_t element, int32_t fallback)
 {
@@ -54,7 +79,9 @@ static void remember(lb_output_t *out)
     lb_platform_t *pl = out->node->platform;
     if (pl->store != NULL) {
         uint8_t b = is_on(out) ? 1u : 0u;
-        pl->store(pl->ctx, NVS_KEY_OUTPUT, &b, sizeof b);
+        char key[STATE_KEY_LEN];
+        state_key(out->endpoint, key);
+        pl->store(pl->ctx, key, &b, sizeof b);
     }
 }
 
@@ -88,7 +115,9 @@ void lb_output_init(lb_output_t *out, lb_node_t *node, lb_endpoint_t *endpoint,
     bool target = behaviour == LB_POWER_ON_ON;
     if (behaviour == LB_POWER_ON_RESTORE && node->platform->load != NULL) {
         uint8_t b = 0;
-        if (node->platform->load(node->platform->ctx, NVS_KEY_OUTPUT, &b, sizeof b)) {
+        char key[STATE_KEY_LEN];
+        state_key(endpoint, key);
+        if (node->platform->load(node->platform->ctx, key, &b, sizeof b)) {
             target = b != 0;
         }
     }

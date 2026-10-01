@@ -1,10 +1,10 @@
 # Native build — the library and everything that can be built from it WITHOUT ESP-IDF.
 #
 # Three things come out of here: the unit tests (`ctest`), `lagun-node` — a node over
-# SocketCAN, the same code that goes onto a board — and `liblagunbus_harness`, a SHARED
-# copy of the library which the Python conformance tests load through `ctypes` to run
-# one scenario against both implementations in one process
-# (python/tests/conformance/).
+# SocketCAN, the same code that goes onto a board — and `liblagunbus_sim`, a SHARED copy
+# of the library with the catalogue of simulated devices (`sim/`), which Python loads
+# through `ctypes`: the conformance tests (python/tests/conformance/) and the simulator
+# `lagun-sim` (zadania/zrobione/FEAT-02.md).
 #
 # The board build has nothing to do with this file. `lagunbus/CMakeLists.txt` is the
 # ESP-IDF component, and a firmware project picks it up through EXTRA_COMPONENT_DIRS.
@@ -29,13 +29,13 @@ set(LAGUNBUS_SOURCES
 add_library(lagunbus STATIC ${LAGUNBUS_SOURCES})
 target_include_directories(lagunbus PUBLIC lagunbus/include)
 
-# The shared copy is the library plus `tests/harness.c` — a flat API over the node that
-# the conformance tests call through `ctypes` (the file says why not the structs
-# directly). Built from the SOURCES rather than by wrapping the static library: a static
-# archive is not position-independent by default, and turning that on for the test
-# binaries too would change what `ctest` checks for no benefit.
-add_library(lagunbus_harness SHARED ${LAGUNBUS_SOURCES} tests/harness.c)
-target_include_directories(lagunbus_harness PUBLIC lagunbus/include)
+# The shared copy is the library plus `sim/` — the device catalogue and a flat API over
+# the node for `ctypes` (`sim/sim.h` says why not the structs directly). Built from the
+# SOURCES rather than by wrapping the static library: a static archive is not
+# position-independent by default, and turning that on for the test binaries too would
+# change what `ctest` checks for no benefit.
+add_library(lagunbus_sim SHARED ${LAGUNBUS_SOURCES} sim/sim.c sim/devices.c)
+target_include_directories(lagunbus_sim PUBLIC lagunbus/include sim)
 
 # The POSIX port — the reference port of the library. It builds EVERYWHERE; on a
 # machine without SocketCAN what is left of it is a polite refusal instead of a socket.

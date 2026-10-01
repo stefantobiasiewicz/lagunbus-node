@@ -1,0 +1,25 @@
+{
+  "about": "The panel3 device of the simulator's catalogue (c/sim/devices.c): three keys on endpoints 4, 5, 6, channels 1, 2, 3, each a full key in CLICK mode. A LOW pin is a press. Each endpoint keeps its OWN event sequence number (01-model-danych.md §3.3), and a press on one key says nothing about the others. `pin` is a list here — one level per input.",
+  "profile": "panel3",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": [true, true, true],
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 10, "note": "the middle key pressed", "pin": [true, false, true]},
+    {"at": 25},
+    {"at": 100, "pin": [true, true, true]},
+    {"at": 114},
+    {"at": 115, "note": "Click x1 from endpoint 5, its first event", "expect": ["02108503#0001"]},
+    {"at": 200, "note": "the right key", "pin": [true, true, false]},
+    {"at": 215},
+    {"at": 300, "pin": [true, true, true]},
+    {"at": 315, "note": "endpoint 6 counts from 0 on its own", "expect": ["02108603#0001"]},
+    {"at": 400, "note": "the middle key again", "pin": [true, false, true]},
+    {"at": 415},
+    {"at": 500, "pin": [true, true, true]},
+    {"at": 515, "note": "endpoint 5, second event", "expect": ["02108503#0101"]},
+    {"at": 600, "note": "Channel of endpoint 6", "rx": ["0C1086F5#07"], "expect": ["0E1086F5#0703"]}
+  ]
+}

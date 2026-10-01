@@ -1,0 +1,18 @@
+{
+  "about": "key made with four channels (`channels`): keys on endpoints 4 … 7, channels 1 … 4, each a full key in CLICK mode. A click on the fourth comes from endpoint 7, as its first event. The default — one key — is key.json.",
+  "profile": "key",
+  "channels": 4,
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": [true, true, true, true],
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 10, "note": "the fourth key pressed", "pin": [true, true, true, false]},
+    {"at": 25},
+    {"at": 100, "pin": [true, true, true, true]},
+    {"at": 114},
+    {"at": 115, "note": "Click x1 from endpoint 7", "expect": ["02108703#0001"]},
+    {"at": 200, "note": "Channel of endpoint 7", "rx": ["0C1087F5#07"], "expect": ["0E1087F5#0704"]}
+  ]
+}

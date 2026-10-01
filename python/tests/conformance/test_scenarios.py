@@ -61,16 +61,26 @@ def check(where: str, sent: list[Frame], expected: list[str]) -> None:
         pytest.fail("\n".join(lines), pytrace=False)
 
 
+def pin_mask(pin: bool | list[bool]) -> int:
+    """`pin` is one level for a device with one input, a list for one with several —
+    as the mask of pin levels a board reads, bit i for input i."""
+    if isinstance(pin, bool):
+        return int(pin)
+    return sum(1 << i for i, level in enumerate(pin) if level)
+
+
 @pytest.mark.parametrize("path", SCENARIOS, ids=[p.stem for p in SCENARIOS])
 def test_scenario(device: DeviceFactory, path: Path) -> None:
     s: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-    node = device(s["profile"], bytes.fromhex(s["uid"]), s["jitter"])
+    node = device(s["profile"], bytes.fromhex(s["uid"]), s["jitter"], s.get("channels", 0))
+    if s.get("restart", False):
+        node.allow_restart()
     for key, value in s.get("store", {}).items():
         node.store_put(key, bytes.fromhex(value))
 
-    pin = bool(s.get("pin", False))
+    pins = pin_mask(s.get("pin", False))
     node.set_clock(s.get("start_at", 0))
-    node.start(pin)
+    node.start(pins)
     check("start", node.take_tx(), s.get("on_start", []))
 
     for i, step in enumerate(s["steps"]):
@@ -79,13 +89,18 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
         for text in step.get("rx", []):
             node.rx(parse(text))
         if "pin" in step:
-            pin = bool(step["pin"])
-        node.loop(pin)
+            pins = pin_mask(step["pin"])
+        node.loop(pins)
         check(where, node.take_tx(), step.get("expect", []))
 
         for key, value in step.get("store", {}).items():
             stored = node.store_get(key)
             wanted = None if value is None else bytes.fromhex(value)
             assert stored == wanted, f"{where}: store[{key!r}] = {stored!r}, expected {wanted!r}"
+        if "restarted" in step:
+            assert node.restart_requested() is step["restarted"], f"{where}: restart"
         if "driven" in step:
-            assert node.driven() == step["driven"], f"{where}: the output drove {node.driven()}"
+            # One level for a single output, a list for a device with several.
+            wanted_levels = step["driven"] if isinstance(step["driven"], list) else [step["driven"]]
+            levels = [node.driven(i) for i in range(len(wanted_levels))]
+            assert levels == wanted_levels, f"{where}: the outputs drove {levels}"

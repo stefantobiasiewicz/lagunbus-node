@@ -1,8 +1,8 @@
-"""A bus and a platform in memory — for tests, and for a simulator.
+"""A bus in memory — a `Transport` whose two ends a test holds in its hands.
 
-The Python counterpart of `c/tests/mock.h`, but part of the library rather than of the
-tests: a simulator (zadania/FEAT-02.md) needs exactly this — a clock it sets itself, a
-store it can save between runs, and a bus it wires nodes together with.
+Used to test what sits between a node and the bus (the fault overlay) without a socket.
+Until zadania/zrobione/FEAT-02.md N11 this module also had an in-memory platform for the Python
+node; the node is now the C library, whose port (clock, store) is `c/sim/sim.c`.
 """
 
 from __future__ import annotations
@@ -42,29 +42,3 @@ class QueueTransport:
         """Everything sent since the last call."""
         out, self.outbox = self.outbox, []
         return out
-
-
-@dataclass
-class MemoryPlatform:
-    """A clock set by hand, a dict for a store, a fixed "random" number."""
-
-    clock: int = 0
-    jitter: int = 0
-    stored: dict[str, bytes] = field(default_factory=dict)
-
-    def millis(self) -> int:
-        return self.clock & 0xFFFFFFFF
-
-    def store(self, key: str, data: bytes) -> bool:
-        self.stored[key] = bytes(data)
-        return True
-
-    def load(self, key: str, length: int) -> bytes | None:
-        data = self.stored.get(key)
-        return data if data is not None and len(data) == length else None
-
-    def random(self) -> int:
-        return self.jitter
-
-    def restart(self) -> bool:
-        return False

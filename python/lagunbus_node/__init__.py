@@ -1,8 +1,10 @@
-"""LagunBus node library — the Python twin of the C library in `../c`.
+"""LagunBus node library, the Python side — the tools AROUND a node, not a node.
 
-Same concepts, same split: the protocol here, the world behind two interfaces
-(`interfaces.Transport`, `interfaces.Platform`), the clock driven from outside. It has
-no line in common with the hub (zadania/zrobione/FEAT-03.md). The two languages are held together
-by the conformance tests in `tests/conformance/`, which run the same vectors and
-scenarios through both.
+The node is the C library in `../c`, the one that goes onto a board. Python reaches it
+through `sim` (the C library behind `ctypes`, with its catalogue of devices), and has
+what a simulator and the tests need around it: the frame codec (`frame`), the registry,
+the fault overlay (`faults`) and transports for a computer (`ports`). Why the split is
+here: zadania/zrobione/FEAT-02.md, N10–N11; README.md § Decisions.
+
+It has no line in common with the hub (zadania/zrobione/FEAT-03.md).
 """

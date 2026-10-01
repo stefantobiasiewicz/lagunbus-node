@@ -1,0 +1,116 @@
+{
+  "about": "The windows of 03-adresacja.md §5.6 with no hub to answer: a random delay from 0 … 2 s before attempts 1–5, 0 … 10 s before 6–10, 0 … 60 s from then on — and before every attempt but the first, the 500 ms the node waits for an assignment (§5.3). Random is fixed at 59000, which falls differently in each window: 1000, 9000, 59000.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 59000,
+  "store": {},
+  "pin": false,
+  "on_start": [],
+  "steps": [
+    {
+      "at": 0,
+      "note": "1 … 5: the window is 2 s, 59000 % 2000 = 1000"
+    },
+    {
+      "at": 999
+    },
+    {
+      "at": 1000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 2499
+    },
+    {
+      "at": 2500,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 3999
+    },
+    {
+      "at": 4000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 5499
+    },
+    {
+      "at": 5500,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 6999
+    },
+    {
+      "at": 7000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 16499
+    },
+    {
+      "at": 16500,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ],
+      "note": "6 … 10: the window is 10 s — 500 + 59000 % 10000"
+    },
+    {
+      "at": 25999
+    },
+    {
+      "at": 26000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 35499
+    },
+    {
+      "at": 35500,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 44999
+    },
+    {
+      "at": 45000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 54499
+    },
+    {
+      "at": 54500,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ]
+    },
+    {
+      "at": 113999
+    },
+    {
+      "at": 114000,
+      "expect": [
+        "1FDB8A7E#7E8ADBF501"
+      ],
+      "note": "11 and on: the window is 60 s, without end — 500 + 59000 % 60000"
+    }
+  ]
+}

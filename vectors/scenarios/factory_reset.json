@@ -13,12 +13,13 @@
     {"at": 200, "note": "LAGN, little-endian", "rx": ["06108002#034E47414C"], "expect": ["0E108002#03"],
      "store": {"address": "4200"}},
     {"at": 249},
-    {"at": 250, "note": "done: no address, next announcement at 250 + 1500 % 1000", "store": {"address": "0000"}},
+    {"at": 250, "note": "done: no address, the first announcement at 250 + 1500 % 2000", "store": {"address": "0000"}},
     {"at": 300, "note": "the old address is not ours any more", "rx": ["0C108001#01"]},
-    {"at": 750, "expect": ["1FDB8A7E#7E8ADBF501"]},
-    {"at": 800, "note": "a new address; Booted carries sequence 1", "rx": ["1EDB8A7E#7E8ADBF54300"],
+    {"at": 1749},
+    {"at": 1750, "expect": ["1FDB8A7E#7E8ADBF501"]},
+    {"at": 1800, "note": "a new address; Booted carries sequence 1", "rx": ["1EDB8A7E#7E8ADBF54300"],
      "expect": ["0210C001#010000010000"], "store": {"address": "4300"}},
-    {"at": 810, "note": "ReportInterval of Diagnostics is back at its default", "rx": ["0C10C1F8#02"],
+    {"at": 1810, "note": "ReportInterval of Diagnostics is back at its default", "rx": ["0C10C1F8#02"],
      "expect": ["0E10C1F8#022C01"]}
   ]
 }

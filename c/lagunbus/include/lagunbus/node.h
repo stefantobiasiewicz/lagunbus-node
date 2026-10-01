@@ -139,7 +139,7 @@ typedef struct {
 
     /* Joining (03-adresacja.md §5). A node that has an address never announces. */
     uint32_t next_join_ms;
-    uint16_t join_backoff_s;
+    uint16_t join_backoff_s; /**< the current window of the random delay: 2, 10 or 60 s */
     uint16_t join_attempts;
 
     uint32_t started_ms;

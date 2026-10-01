@@ -215,14 +215,34 @@ void lb_node_start(lb_node_t *node)
     }
 }
 
-/** Schedule an announcement.
+/** How long a node waits for an ASSIGNMENT before it may try again (03-adresacja.md
+ * §5.3, phase 2). */
+#define LB_JOIN_WAIT_MS 500u
+
+/** The window of the random delay before attempt `attempt` (1, 2, …), in seconds —
+ * the table of 03-adresacja.md §5.6: 2 s for 1–5, 10 s for 6–10, 60 s from then on. */
+static uint16_t join_window_s(uint16_t attempt)
+{
+    return attempt <= 5u ? 2u : attempt <= 10u ? 10u : 60u;
+}
+
+/** Schedule the next announcement.
  *
  * The delay is **random**, and that is not decoration: after power comes back every
  * node starts within the same second. Without the spread they announce simultaneously,
  * collide on the bus and retry — just as much in unison (03-adresacja.md §5.3).
  *
- * Each attempt is rarer than the last, because the hub may be off for hours, and a
+ * The windows grow by the table of §5.6, because the hub may be off for hours, and a
  * node asking every second occupies the bus all that time to no purpose whatsoever.
+ *
+ * After an announcement the node first waits `LB_JOIN_WAIT_MS` for its assignment, and
+ * only then draws the delay — so two announcements are never closer than that,
+ * whatever the draw. Until 2026-10-01 this wait was missing and the windows were
+ * 1, 2, 4 … 60 s: with an unlucky draw (and in the simulator, whose `random` is fixed,
+ * with a draw of 0) a node announced on every turn of its loop (zadania/zrobione/FEAT-02.md,
+ * F8). Pinned by vectors/scenarios/join.json and join_backoff.json.
+ *
+ * `join_backoff_s` keeps the current window for whoever logs it (the boards do).
  */
 static void schedule_announce(lb_node_t *node)
 {
@@ -231,13 +251,10 @@ static void schedule_announce(lb_node_t *node)
                     ? node->platform->random(node->platform->ctx)
                     : 0u;
 
-    if (node->join_attempts == 0) {
-        node->join_backoff_s = 1;
-    } else if (node->join_backoff_s < 60) {
-        node->join_backoff_s = (uint16_t)(node->join_backoff_s * 2u);
-    }
+    node->join_backoff_s = join_window_s((uint16_t)(node->join_attempts + 1u));
     uint32_t window = (uint32_t)node->join_backoff_s * 1000u;
-    node->next_join_ms = now + (jitter % window);
+    uint32_t wait = node->join_attempts == 0 ? 0u : LB_JOIN_WAIT_MS;
+    node->next_join_ms = now + wait + (jitter % window);
 }
 
 /** ANNOUNCEMENT: ShortId in the identifier and in the payload, plus the node class.
@@ -602,7 +619,9 @@ static uint8_t device_command(lb_node_t *node, uint8_t element,
  * restart, a power cut half-way — the node comes back without it and announces itself.
  * Only then the restart, which returns everything held in RAM to its defaults.
  */
-static void factory_reset(lb_node_t *node)
+/** Returns true when the platform restarted — on a board it never returns at all; on a
+ * host (the simulator) it does, and that boot is over: the caller sends nothing more. */
+static bool factory_reset(lb_node_t *node)
 {
     node->reset_pending = false;
     node->address = LB_ADDRESS_UNASSIGNED;
@@ -612,13 +631,14 @@ static void factory_reset(lb_node_t *node)
     }
     if (node->platform->restart != NULL) {
         node->platform->restart(node->platform->ctx);
-        return; /* on the board: never reached */
+        return true; /* on the board: never reached */
     }
     /* Without a restart the system settings are all we can put back — the endpoints'
      * defaults live in the application's arrays, not here. */
     system_defaults(node);
     node->join_attempts = 0;
     schedule_announce(node);
+    return false;
 }
 
 static void respond(lb_node_t *node, const lb_fields_t *f, uint8_t tid,
@@ -725,15 +745,18 @@ void lb_node_tick(lb_node_t *node)
     }
 
     if (node->reset_pending
-        && (int32_t)(node->platform->millis(node->platform->ctx) - node->reset_at_ms) >= 0) {
-        factory_reset(node);
+        && (int32_t)(node->platform->millis(node->platform->ctx) - node->reset_at_ms) >= 0
+        && factory_reset(node)) {
+        return; /* restarted: an announcement now would come from a boot that is over */
     }
 
     /* Having no address is the only condition: a node that receives one stops meeting
      * it and thereby stops announcing. There is no separate "should I announce" flag,
      * because it would be a second description of the same state. */
+    /* Modulo 2^32, like the reset deadline above: `millis()` wraps after 49 days, and a
+     * plain `>=` would then stop a node without an address from ever announcing. */
     if (node->address == LB_ADDRESS_UNASSIGNED
-        && node->platform->millis(node->platform->ctx) >= node->next_join_ms) {
+        && (int32_t)(node->platform->millis(node->platform->ctx) - node->next_join_ms) >= 0) {
         announce(node);
     }
     lb_frame_t frame;

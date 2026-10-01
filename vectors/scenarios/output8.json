@@ -1,0 +1,17 @@
+{
+  "about": "The output8 device of the simulator's catalogue (c/sim/devices.c): eight outputs on endpoints 4 … 11, PowerOnBehaviour = RESTORE, no Invert. Each restores and stores its own state under its own key (output4 … output11), and there is no endpoint 12.",
+  "profile": "output8",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200", "output11": "01"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 0, "note": "only the last output comes up on", "driven": [0, 0, 0, 0, 0, 0, 0, 1]},
+    {"at": 100, "note": "On for endpoint 8 — the fifth output",
+     "rx": ["06108801#01"], "expect": ["10108800#01", "0E108801#01"],
+     "driven": [0, 0, 0, 0, 1, 0, 0, 1], "store": {"output8": "01", "output11": "01"}},
+    {"at": 200, "note": "read OnOff of endpoint 11", "rx": ["0C108B00#03"], "expect": ["0E108B00#0301"]},
+    {"at": 300, "note": "no endpoint 12", "rx": ["0C108C00#02"], "expect": ["0E108C00#0A"]}
+  ]
+}

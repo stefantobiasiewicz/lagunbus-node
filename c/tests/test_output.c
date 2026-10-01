@@ -155,7 +155,7 @@ int main(void)
         set_attr(LB_OUT_POWER_ON_BEHAVIOUR, LB_POWER_ON_RESTORE);
         turn_on(true);
         lb_output_command(&out, LB_OUT_CMD_ON);
-        LB_ASSERT(mock_has(&a, "output"));
+        LB_ASSERT(mock_has(&a, "output4"));
         turn_on(false);
         LB_ASSERT(pin == true);
 
@@ -173,7 +173,7 @@ int main(void)
         for (int i = 0; i < 20; i++) {
             lb_output_command(&out, LB_OUT_CMD_TOGGLE);
         }
-        LB_ASSERT(!mock_has(&a, "output"));
+        LB_ASSERT(!mock_has(&a, "output4"));
     }
 
     printf("\nAutoOffTime\n");
