@@ -1,7 +1,7 @@
 /* Momentary key — type 0x0010 KeyInput. **Tools, not a key.**
  *
  * The library gives a device the pieces and leaves the decisions to it
- * (zadania/CR-01.md, N6 and K1–K5). A device picks what it uses:
+ * (zadania/zrobione/CR-01.md, N6 and K1–K5). A device picks what it uses:
  *
  *   - `LB_KEY_ATTR_…`             rows for its attribute array, only the ones it exposes;
  *   - `lb_key_check`,

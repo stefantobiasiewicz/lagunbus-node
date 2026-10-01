@@ -2,7 +2,7 @@
  *
  * Bounce belongs to how an input is built, and the specification leaves it to the
  * device entirely: no type has an attribute for it any more (types/0x0010-key-input.md
- * §5.7, zadania/CR-01.md N1a). The device decides whether it needs this at all — a
+ * §5.7, zadania/zrobione/CR-01.md N1a). The device decides whether it needs this at all — a
  * hardware RC filter or a touch controller may do the job — and with what window.
  *
  * Polarity is the device's too: pass in "is the finger on it", not the pin level.
