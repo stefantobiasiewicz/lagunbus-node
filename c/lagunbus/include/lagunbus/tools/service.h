@@ -1,4 +1,4 @@
-/* The service button — a tool, not a type (zadania/CR-05.md).
+/* The service button — a tool, not a type (zadania/zrobione/CR-05.md).
  *
  * Every device has one, for a local factory reset; the library's part of the reset is
  * `lb_node_factory_reset()`. How the button guards against an accidental reset is the
@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 /** The project's hold time — a guideline for its devices, not a rule of the
- * specification (zadania/CR-05.md, N4). */
+ * specification (zadania/zrobione/CR-05.md, N4). */
 #define LB_SERVICE_HOLD_MS 5000u
 
 typedef enum {

@@ -20,7 +20,7 @@ extern "C" {
 /** Reason for the last restart — `LastResetReason`, the table of types/0x0001-device.md
  * §2.4. Until 2026-10-03 these were 0…3 with `SOFTWARE` at 1 and `BROWNOUT` at 3, which
  * the specification calls `EXTERNAL` and `SOFTWARE`; nothing set them, so the node only
- * ever said `POWER_ON` and the mistake stayed invisible (zadania/CR-05.md). Pinned by
+ * ever said `POWER_ON` and the mistake stayed invisible (zadania/zrobione/CR-05.md). Pinned by
  * vectors/scenarios/reset_reason.json. */
 #define LB_RESET_POWER_ON  0x00u
 #define LB_RESET_EXTERNAL  0x01u
@@ -126,7 +126,7 @@ typedef struct {
 typedef void (*lb_watch_fn)(void *ctx, const lb_frame_t *frame, bool outgoing);
 
 /** What the node is doing, as a person standing next to it should see it — the status
- * LED every device has (zadania/CR-05.md).
+ * LED every device has (zadania/zrobione/CR-05.md).
  *
  * **One state at a time**, the most important one, by a fixed priority from the top of
  * this list down. Several things can be true at once — no address and a dead bus, say —
@@ -252,7 +252,7 @@ void lb_node_start(lb_node_t *node);
 /** One turn of the loop: take in whatever is waiting, and answer. Never blocks. */
 void lb_node_tick(lb_node_t *node);
 
-/** Factory reset from the device itself — the service button (zadania/CR-05.md).
+/** Factory reset from the device itself — the service button (zadania/zrobione/CR-05.md).
  *
  * The same path as `FactoryReset` from the hub, minus the reply: it is only ACCEPTED here
  * and carried out in `lb_node_tick` `LB_RESET_GRACE_MS` later, so the state watch gets

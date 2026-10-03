@@ -610,7 +610,7 @@ static uint8_t system_command(lb_node_t *node, uint8_t endpoint, uint8_t element
  * `Identify` only sets a deadline: what the person sees is the device's business, told
  * through the state watch (`LB_STATE_IDENTIFY`). A device without an LED still accepts it
  * (COMPLIANCE.md LB-NODE-055). Until 2026-10-03 this answered `UNSUPPORTED_ELEMENT` while
- * the hub's view sent it on `i` (zadania/CR-05.md); pinned by vectors/scenarios/identify.json.
+ * the hub's view sent it on `i` (zadania/zrobione/CR-05.md); pinned by vectors/scenarios/identify.json.
  *
  * `Reboot` takes the factory reset's path without the wipe. Its `delay` is honoured, but
  * never below `LB_RESET_GRACE_MS`: "0 = at once" is allowed by the type, yet a restart

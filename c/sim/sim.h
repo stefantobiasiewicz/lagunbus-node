@@ -92,7 +92,7 @@ struct lbs {
 
     bool restart_requested; /**< the node called `restart` — Python boots a new one */
 
-    /* The service button and the status LED (zadania/CR-05.md). The state is what the
+    /* The service button and the status LED (zadania/zrobione/CR-05.md). The state is what the
      * node REPORTED through `on_state`, not what it would compute — so a scenario checks
      * the watch itself. */
     int      state;         /**< the last reported `lb_node_state_t`, -1 before any */

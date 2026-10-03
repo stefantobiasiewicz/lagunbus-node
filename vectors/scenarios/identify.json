@@ -1,5 +1,5 @@
 {
-  "about": "Identify (types/0x0001-device.md §3.1) — mandatory: acknowledged, then the node is IDENTIFY for `duration` seconds and stops by itself; 0 stops it at once; a missing argument is INVALID_VALUE. Until 2026-10-03 the library answered UNSUPPORTED_ELEMENT while the hub's view sent it on `i` (zadania/CR-05.md).",
+  "about": "Identify (types/0x0001-device.md §3.1) — mandatory: acknowledged, then the node is IDENTIFY for `duration` seconds and stops by itself; 0 stops it at once; a missing argument is INVALID_VALUE. Until 2026-10-03 the library answered UNSUPPORTED_ELEMENT while the hub's view sent it on `i` (zadania/zrobione/CR-05.md).",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 0,

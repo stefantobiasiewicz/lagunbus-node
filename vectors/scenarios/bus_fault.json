@@ -1,5 +1,5 @@
 {
-  "about": "BUS_FAULT (zadania/CR-05.md): the node asks the port's health at every tick; error passive and bus-off are a fault, warning is not. Every entry into bus-off counts in Diagnostics.BusOffCount, which until 2026-10-03 nothing ever raised. At every tick, not every 250 ms as first proposed: the ESP32 is out of bus-off in about 11 ms (128 x 11 bits at 125 kbit/s), and a slower look would miss bus-offs and undercount.",
+  "about": "BUS_FAULT (zadania/zrobione/CR-05.md): the node asks the port's health at every tick; error passive and bus-off are a fault, warning is not. Every entry into bus-off counts in Diagnostics.BusOffCount, which until 2026-10-03 nothing ever raised. At every tick, not every 250 ms as first proposed: the ESP32 is out of bus-off in about 11 ms (128 x 11 bits at 125 kbit/s), and a slower look would miss bus-offs and undercount.",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 0,

@@ -53,7 +53,7 @@ typedef struct lb_platform {
      * Only the chip knows: on the ESP32 `esp_reset_reason()` tells a watchdog from a
      * brownout from `esp_restart()`. Until 2026-10-03 the node had no way to ask and
      * reported `POWER_ON` after every restart — a node resetting itself once a day looked
-     * like one whose power is switched (zadania/CR-05.md). */
+     * like one whose power is switched (zadania/zrobione/CR-05.md). */
     uint8_t (*reset_reason)(void *ctx);
 
     void *ctx;

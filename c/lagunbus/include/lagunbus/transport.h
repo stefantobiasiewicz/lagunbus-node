@@ -26,7 +26,7 @@ extern "C" {
  * (`LB_DIAG_BUS_*` in node.h); the port has a fourth, `WARNING`, which the specification
  * covers with `ErrorThreshold` instead, and the node maps it to `ACTIVE` on the way out.
  * Until 2026-10-03 the node sent these as they were, so PASSIVE arrived as 2 — `BUS_OFF`
- * to anyone reading the specification (zadania/CR-05.md, vectors/scenarios/bus_state.json).
+ * to anyone reading the specification (zadania/zrobione/CR-05.md, vectors/scenarios/bus_state.json).
  */
 #define LB_BUS_ACTIVE   0x00u
 #define LB_BUS_WARNING  0x01u

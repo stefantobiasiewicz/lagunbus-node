@@ -1,4 +1,4 @@
-/* The status LED — a tool, not a type (zadania/CR-05.md).
+/* The status LED — a tool, not a type (zadania/zrobione/CR-05.md).
  *
  * Every device has one, and every device of the project is to blink the same way in the
  * same situation — so the patterns live here, once, and are tested on a computer. The

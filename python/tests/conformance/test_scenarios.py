@@ -8,7 +8,7 @@ of the application loop (node tick, then the key or output logic) — the same t
 
 Frames are written as `candump` does — `IDENTIFIER#DATA`, both in hex.
 
-The service button and the status LED (zadania/CR-05.md): `reset_reason` at the top is
+The service button and the status LED (zadania/zrobione/CR-05.md): `reset_reason` at the top is
 what the platform says the last restart was, `bus` (at the top or in a step) is what the
 port's `health` answers from then on — `active`, `warning`, `passive`, `off`. In a step,
 `service: true` presses the service button before the turn, and `state` is the state the

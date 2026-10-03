@@ -279,7 +279,7 @@ class SimDevice:
         """`OnOff` of the output — the state, before `Invert`."""
         return int(self.lib.lbs_output_on(self._h, output)) == 1
 
-    # --- the service button and the status LED (zadania/CR-05.md) -------------------
+    # --- the service button and the status LED (zadania/zrobione/CR-05.md) -------------------
 
     def service_press(self) -> None:
         """The service button held long enough: the node's own factory reset."""

@@ -1,5 +1,5 @@
 {
-  "about": "The state watch for the status LED (zadania/CR-05.md): reported once at the start, then on change only. A node without an address is NO_ADDRESS while it announces, and READY from the call that takes its assignment — that same call sends Booted, so there is no state between the two. Random fixed at 1500, as in join.json.",
+  "about": "The state watch for the status LED (zadania/zrobione/CR-05.md): reported once at the start, then on change only. A node without an address is NO_ADDRESS while it announces, and READY from the call that takes its assignment — that same call sends Booted, so there is no state between the two. Random fixed at 1500, as in join.json.",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 1500,

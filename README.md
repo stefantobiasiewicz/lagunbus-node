@@ -267,7 +267,7 @@ identifier. Enough for running things together; arbitration is tested on the hub
 
 ### The node tells the device its state; the device shows it (2026-10-03)
 
-Every device has a service button and a status LED (`zadania/CR-05.md`). The library
+Every device has a service button and a status LED (`zadania/zrobione/CR-05.md`). The library
 says **what is happening**, the device decides **how to show it** — the library does not
 know a GPIO exists, for the same reason it does not know `ESP_LOGI` does (`on_frame`).
 

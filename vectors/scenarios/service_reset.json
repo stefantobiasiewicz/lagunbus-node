@@ -1,5 +1,5 @@
 {
-  "about": "The service button (zadania/CR-05.md): lb_node_factory_reset() takes the same path as FactoryReset from the hub, minus the reply — accepted at once, the state goes RESETTING (above IDENTIFY), carried out 50 ms later. Without a restart hook the node forgets the address and an Identify in progress, and joins again; jitter 1500.",
+  "about": "The service button (zadania/zrobione/CR-05.md): lb_node_factory_reset() takes the same path as FactoryReset from the hub, minus the reply — accepted at once, the state goes RESETTING (above IDENTIFY), carried out 50 ms later. Without a restart hook the node forgets the address and an Identify in progress, and joins again; jitter 1500.",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 1500,
