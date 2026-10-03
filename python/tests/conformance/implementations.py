@@ -92,6 +92,11 @@ class Device(Protocol):
         """The last level output `index` drove, or `None` before any."""
         ...
 
+    def service_press(self) -> None: ...
+    def state(self) -> str | None: ...
+    def set_bus(self, state: str) -> None: ...
+    def set_reset_reason(self, reason: str) -> None: ...
+
 
 # --- Python -------------------------------------------------------------------------
 
@@ -290,3 +295,15 @@ class CDevice:
 
     def driven(self, index: int = 0) -> int | None:
         return self.device.driven(index)
+
+    def service_press(self) -> None:
+        self.device.service_press()
+
+    def state(self) -> str | None:
+        return self.device.state
+
+    def set_bus(self, state: str) -> None:
+        self.device.set_bus(sim.BUS_STATES[state])
+
+    def set_reset_reason(self, reason: str) -> None:
+        self.device.set_reset_reason(sim.RESET_REASONS[reason])

@@ -97,7 +97,7 @@ The C library is split by what a piece IS:
 | | `c/lagunbus/` | what |
 |---|---|---|
 | core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
-| `tools/` | `…/tools/debounce.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike) |
+| `tools/` | `…/tools/debounce.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device) |
 | `types/` | `…/types/key.h`, `…/types/output.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
 Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
@@ -265,6 +265,52 @@ identifier. Enough for running things together; arbitration is tested on the hub
 **Pinned by** the same byte vector in `python/tests/test_ports.py` and
 `hub/tests/test_udp_bus.py` — a change on one side alone fails the other.
 
+### The node tells the device its state; the device shows it (2026-10-03)
+
+Every device has a service button and a status LED (`zadania/CR-05.md`). The library
+says **what is happening**, the device decides **how to show it** — the library does not
+know a GPIO exists, for the same reason it does not know `ESP_LOGI` does (`on_frame`).
+
+**One state at a time.** `on_state` gets a single `lb_node_state_t`, the most important
+by a fixed priority: `RESETTING` > `IDENTIFY` > `BUS_FAULT` > `NO_ADDRESS` > `READY`.
+Several can be true at once (no address on a dead bus); deciding which one shows in the
+library means every device shows the same thing in the same situation. The rejected
+alternative — separate facts, each device picking — gives an RGB device more freedom
+and every device its own priority. Called on change only, and once from
+`lb_node_start`. There is no "joined" state (the assignment and `Booted` happen in the
+same call, no tick sees the gap) and no "no hub" state (the node does not know the hub;
+alone on the cable it gets no ACKs and goes error passive, which is `BUS_FAULT`).
+
+**The bus is read at every tick**, not every 250 ms as first proposed: the ESP32 is out
+of bus-off in about 11 ms, and a slower look missed bus-offs — `BusOffCount` counts
+every entry, and until now nothing raised it at all.
+
+**The button is `lb_node_factory_reset()`** — the hub's `FactoryReset` path without the
+reply, so `RESETTING` reaches the LED before the restart. The project's guard — held
+5 s, reset on the release, armed only once seen released — is `tools/service.h`, a
+guideline for this project's devices, not a rule of the specification. The patterns
+are `tools/led.h`, single colour or RGB, so all devices blink alike.
+
+**`Identify` and `Reboot`** are mandatory in `Device` and were missing (the hub's view
+sent `Identify` on `i` and got `UNSUPPORTED_ELEMENT`). `Reboot` takes the reset path
+without the wipe, its delay never below `LB_RESET_GRACE_MS` — "0 = at once" would lose
+the acknowledgement. Without a restart hook it does what a restart looks like on the
+bus: `Booted` with `SOFTWARE`, the boot counted.
+
+**`LastResetReason` comes from the platform** (`platform->reset_reason`, on the board
+`esp_reset_reason()`), and the `LB_RESET_*` constants now have the specification's
+values — they were shifted (`SOFTWARE` 1, `BROWNOUT` 3) and never used, so the node said
+`POWER_ON` after every restart.
+
+**`Diagnostics.BusState` has the specification's three values** (`LB_DIAG_BUS_*`):
+the port's `LB_BUS_*` has a fourth, `WARNING`, which the attribute covers with
+`ErrorThreshold`, so it goes out as `ACTIVE`. The node used to send the port's 0…3 as
+they were, and the hub agreed — both against the specification, where PASSIVE is 1.
+
+**Pinned by** `vectors/scenarios/state_join.json`, `identify.json`, `service_reset*.json`,
+`bus_fault*.json`, `bus_state.json`, `reboot*.json`, `reset_reason.json`, the states added to
+`factory_reset*.json`, and `c/tests/test_led.c`, `test_service.c`.
+
 ## The registry
 
 ```sh
@@ -300,12 +346,6 @@ already persistent):
 
 - persistent attributes. Settings are meant to survive a power cut, and today every one
   returns to its default (zadania/TASK-01.md);
-- `Reboot` (today `UNSUPPORTED_ELEMENT`) and `Identify` ("which box is it").
-  `FactoryReset` is done: acknowledged from the old address and carried out 50 ms later.
-  The address is stored as none, then `restart` runs (on the board `esp_restart()`).
-  Without a restart hook (host, tests) the node only drops the address and the system
-  settings and rejoins. The simulator has one (`lbs_allow_restart`): the node stops
-  after the reset and `lagun-sim` boots a new one from the store;
 - the firmware version in `Booted`: raising it should cause re-enumeration, a restart
   without a change should not.
 

@@ -1,0 +1,16 @@
+{
+  "about": "Diagnostics.BusState with the values of types/0x0002-diagnostics.md §2.4: ACTIVE 0, PASSIVE 1, BUS_OFF 2. The port's own WARNING (TEC/REC above 96) is not a value of the attribute — the specification covers it with ErrorThreshold — and goes out as ACTIVE. Until 2026-10-03 the node sent the port's 0…3 as they were, so PASSIVE arrived as 2, which the specification calls BUS_OFF (zadania/CR-05.md).",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "bus": "active",
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "rx": ["0C108102#01"], "expect": ["0E108102#0100"]},
+    {"at": 200, "bus": "warning", "rx": ["0C108102#02"], "expect": ["0E108102#0200"]},
+    {"at": 300, "bus": "passive", "rx": ["0C108102#03"], "expect": ["0E108102#0301"]},
+    {"at": 400, "bus": "off", "rx": ["0C108102#04"], "expect": ["0E108102#0402"]}
+  ]
+}

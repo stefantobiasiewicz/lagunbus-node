@@ -1,0 +1,15 @@
+{
+  "about": "Reboot on a device with a restart: acknowledged, `delay` later the restart runs and the address stays stored — unlike FactoryReset (factory_reset_restart.json).",
+  "profile": "output",
+  "restart": true,
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "rx": ["06108001#01E803"], "expect": ["0E108001#01"], "state": "RESETTING"},
+    {"at": 1099, "restarted": false},
+    {"at": 1100, "restarted": true, "store": {"address": "4200"}}
+  ]
+}

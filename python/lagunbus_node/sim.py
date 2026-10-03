@@ -33,6 +33,21 @@ KEY_SIZE: Final = 16
 VALUE_SIZE: Final = 8
 
 
+BUS_STATES: Final = {"active": 0, "warning": 1, "passive": 2, "off": 3}
+"""`LB_BUS_*` from transport.h, by the names scenarios use."""
+
+RESET_REASONS: Final = {
+    "POWER_ON": 0,
+    "EXTERNAL": 1,
+    "WATCHDOG": 2,
+    "SOFTWARE": 3,
+    "BROWNOUT": 4,
+    "UNKNOWN": 5,
+}
+"""`LastResetReason` (types/0x0001-device.md §2.4) — the values, not the C constants, so
+a constant that drifts from the specification fails a scenario."""
+
+
 class BuildError(RuntimeError):
     """The C library could not be built — the message carries the compiler's output."""
 
@@ -109,6 +124,13 @@ def load() -> ctypes.CDLL:
     sig("lbs_output_count", i32, ptr)
     sig("lbs_driven", i32, ptr, i32)
     sig("lbs_output_on", i32, ptr, i32)
+    sig("lbs_service_press", None, ptr)
+    sig("lbs_state", i32, ptr)
+    sig("lbs_state_reports", u32, ptr)
+    sig("lbs_state_name", text, i32)
+    sig("lbs_led", b, ptr)
+    sig("lbs_set_bus", None, ptr, u8)
+    sig("lbs_set_reset_reason", None, ptr, u8)
     sig("lbs_address", u16, ptr)
     sig("lbs_short_id", u32, ptr)
     return lib
@@ -256,6 +278,37 @@ class SimDevice:
     def output_on(self, output: int) -> bool:
         """`OnOff` of the output — the state, before `Invert`."""
         return int(self.lib.lbs_output_on(self._h, output)) == 1
+
+    # --- the service button and the status LED (zadania/CR-05.md) -------------------
+
+    def service_press(self) -> None:
+        """The service button held long enough: the node's own factory reset."""
+        self.lib.lbs_service_press(self._h)
+
+    @property
+    def state(self) -> str | None:
+        """The last state the node reported for its LED — `"READY"`, `"NO_ADDRESS"`, … —
+        or `None` before the first report."""
+        name = self.lib.lbs_state_name(self.lib.lbs_state(self._h))
+        return None if name is None else str(name.decode())
+
+    @property
+    def led(self) -> bool:
+        """The status LED as the library's `tools/led.h` drives it, at the last loop."""
+        return bool(self.lib.lbs_led(self._h))
+
+    @property
+    def state_reports(self) -> int:
+        """How many times the node called its state watch — it is to call on change only."""
+        return int(self.lib.lbs_state_reports(self._h))
+
+    def set_bus(self, state: int) -> None:
+        """Make the port answer `health` with `state` (`BUS_STATES`) from now on."""
+        self.lib.lbs_set_bus(self._h, state)
+
+    def set_reset_reason(self, reason: int) -> None:
+        """What the platform says the last restart was — read at `start`."""
+        self.lib.lbs_set_reset_reason(self._h, reason)
 
     @property
     def address(self) -> int:

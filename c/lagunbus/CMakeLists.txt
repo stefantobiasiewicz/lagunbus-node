@@ -6,6 +6,7 @@
 # repository, `ports/esp32c3` in `devices`).
 idf_component_register(
     SRCS "src/frame.c" "src/values.c" "src/endpoint.c" "src/node.c"
-         "src/tools/debounce.c" "src/types/key.c" "src/types/output.c"
+         "src/tools/debounce.c" "src/tools/led.c" "src/tools/service.c"
+         "src/types/key.c" "src/types/output.c"
     INCLUDE_DIRS "include"
 )

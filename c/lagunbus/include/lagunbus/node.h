@@ -17,11 +17,17 @@ extern "C" {
 
 #define LB_UID_LEN 8
 
-/** Reason for the last restart (types/0x0001-device.md §3). */
+/** Reason for the last restart — `LastResetReason`, the table of types/0x0001-device.md
+ * §2.4. Until 2026-10-03 these were 0…3 with `SOFTWARE` at 1 and `BROWNOUT` at 3, which
+ * the specification calls `EXTERNAL` and `SOFTWARE`; nothing set them, so the node only
+ * ever said `POWER_ON` and the mistake stayed invisible (zadania/CR-05.md). Pinned by
+ * vectors/scenarios/reset_reason.json. */
 #define LB_RESET_POWER_ON  0x00u
-#define LB_RESET_SOFTWARE  0x01u
+#define LB_RESET_EXTERNAL  0x01u
 #define LB_RESET_WATCHDOG  0x02u
-#define LB_RESET_BROWNOUT  0x03u
+#define LB_RESET_SOFTWARE  0x03u
+#define LB_RESET_BROWNOUT  0x04u
+#define LB_RESET_UNKNOWN   0x05u
 
 /** `Device` (ep0) elements the hub needs while identifying a node. */
 #define LB_DEV_UID               0x00u
@@ -38,6 +44,8 @@ extern "C" {
 #define LB_DEV_EVENT_BOOTED      0x01u
 
 /* `Device` commands (types/0x0001-device.md §3). */
+#define LB_DEV_CMD_IDENTIFY      0x00u
+#define LB_DEV_CMD_REBOOT        0x01u
 #define LB_DEV_CMD_FACTORY_RESET 0x02u
 /** The argument without which `FactoryReset` is refused — the characters `LAGN`. A single
  * flipped bit must not wipe a node in the wall (types/0x0001-device.md §3.3). */
@@ -63,6 +71,12 @@ extern "C" {
 #define LB_DIAG_TX_DROPPED       0x06u
 #define LB_DIAG_ERROR_THRESHOLD  0x20u
 #define LB_DIAG_CMD_RESET        0x00u
+
+/** `Diagnostics.BusState` on the wire (types/0x0002-diagnostics.md §2.4) — not the
+ * port's `LB_BUS_*`, which has a `WARNING` the attribute does not (transport.h). */
+#define LB_DIAG_BUS_ACTIVE       0x00u
+#define LB_DIAG_BUS_PASSIVE      0x01u
+#define LB_DIAG_BUS_OFF          0x02u
 
 #define LB_GROUPS_CAPACITY  0x00u
 #define LB_GROUPS_COUNT     0x01u
@@ -111,6 +125,37 @@ typedef struct {
  */
 typedef void (*lb_watch_fn)(void *ctx, const lb_frame_t *frame, bool outgoing);
 
+/** What the node is doing, as a person standing next to it should see it — the status
+ * LED every device has (zadania/CR-05.md).
+ *
+ * **One state at a time**, the most important one, by a fixed priority from the top of
+ * this list down. Several things can be true at once — no address and a dead bus, say —
+ * and a single LED can show only one of them; deciding which in the library means every
+ * device shows the same thing in the same situation. A device that wants more (an RGB
+ * LED showing the bus colour AND blinking for `Identify`) can still read the node's
+ * fields; nothing here stops it.
+ *
+ * There is no "joined" state between the two: `accept_assignment` stores the address
+ * and sends `Booted` in the same call, so no tick ever sees it. Nor is there "no hub":
+ * the node does not know the hub's address, and a node alone on the cable gets no ACKs
+ * and goes error passive anyway — which `BUS_FAULT` shows.
+ */
+typedef enum {
+    LB_STATE_RESETTING = 0, /**< a factory reset or `Reboot` accepted; the restart is next */
+    LB_STATE_IDENTIFY,      /**< `Identify` running — "it's me" */
+    LB_STATE_BUS_FAULT,     /**< the controller is error passive or bus-off */
+    LB_STATE_NO_ADDRESS,    /**< no address — announcing itself */
+    LB_STATE_READY,         /**< an address, `Booted` sent, working */
+} lb_node_state_t;
+
+/** State watch — called when the state CHANGES, and once from `lb_node_start` with the
+ * state it starts in, so an LED does not wait for the first change.
+ *
+ * Called from inside `lb_node_tick` (or `lb_node_start`, `lb_node_factory_reset`), so it
+ * **must not block**: set a pattern and return; the blinking is counted out by the
+ * device's loop (`lagunbus/tools/led.h` does exactly that). NULL — nobody looks. */
+typedef void (*lb_state_fn)(void *ctx, lb_node_state_t state);
+
 /** The reporting settings of one system endpoint.
  *
  * A system endpoint has the full set of common attributes (01-model-danych.md §4.1).
@@ -145,9 +190,20 @@ typedef struct {
     uint32_t started_ms;
     bool     booted;
 
-    /** A factory reset acknowledged and not yet carried out — see `LB_RESET_GRACE_MS`. */
+    /** A factory reset or a `Reboot` acknowledged and not yet carried out — see
+     * `LB_RESET_GRACE_MS`. `reset_wipe` tells the two apart: only a factory reset
+     * forgets the address. */
     bool     reset_pending;
+    bool     reset_wipe;
     uint32_t reset_at_ms;
+
+    /** `Identify` runs while this is in the future (modulo 2^32, like every deadline). */
+    bool     identifying;
+    uint32_t identify_until_ms;
+
+    /** The controller's state, read through `transport->health` at every tick —
+     * `LB_BUS_ACTIVE` when the port cannot tell. */
+    uint8_t  bus_state;
 
     /* Counters — for Diagnostics, and for seeing whether anything works at all. */
     uint32_t received;
@@ -164,6 +220,13 @@ typedef struct {
     /** Traffic watch. NULL means "do not look" and costs nothing. */
     lb_watch_fn on_frame;
     void       *watch_ctx;
+
+    /** State watch, for the status LED. NULL means "do not look". Set it before
+     * `lb_node_start`, as `on_frame`. */
+    lb_state_fn     on_state;
+    void           *state_ctx;
+    lb_node_state_t state;       /**< the last state reported */
+    bool            state_known; /**< false until the first report */
 } lb_node_t;
 
 /** Set the node up. Does not touch the bus — the start-up order lives in
@@ -188,6 +251,18 @@ void lb_node_start(lb_node_t *node);
 
 /** One turn of the loop: take in whatever is waiting, and answer. Never blocks. */
 void lb_node_tick(lb_node_t *node);
+
+/** Factory reset from the device itself — the service button (zadania/CR-05.md).
+ *
+ * The same path as `FactoryReset` from the hub, minus the reply: it is only ACCEPTED here
+ * and carried out in `lb_node_tick` `LB_RESET_GRACE_MS` later, so the state watch gets
+ * `LB_STATE_RESETTING` before the restart. How long the button has to be held, and
+ * whether it counts at start-up, is the device's decision — the library only hears
+ * "reset". */
+void lb_node_factory_reset(lb_node_t *node);
+
+/** The state's name — "NO_ADDRESS", "READY", … — for logs and the simulator. */
+const char *lb_node_state_name(lb_node_state_t state);
 
 /** Endpoint by number, or NULL. */
 lb_endpoint_t *lb_node_endpoint(lb_node_t *node, uint8_t number);

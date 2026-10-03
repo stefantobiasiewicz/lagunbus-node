@@ -7,6 +7,12 @@ of the application loop (node tick, then the key or output logic) — the same t
 `expect`, **exactly**: a frame too many is as much a failure as one missing.
 
 Frames are written as `candump` does — `IDENTIFIER#DATA`, both in hex.
+
+The service button and the status LED (zadania/CR-05.md): `reset_reason` at the top is
+what the platform says the last restart was, `bus` (at the top or in a step) is what the
+port's `health` answers from then on — `active`, `warning`, `passive`, `off`. In a step,
+`service: true` presses the service button before the turn, and `state` is the state the
+node last REPORTED to its state watch — `on_start_state` the same after the start.
 """
 
 from __future__ import annotations
@@ -77,11 +83,17 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
         node.allow_restart()
     for key, value in s.get("store", {}).items():
         node.store_put(key, bytes.fromhex(value))
+    if "reset_reason" in s:
+        node.set_reset_reason(s["reset_reason"])
+    if "bus" in s:
+        node.set_bus(s["bus"])
 
     pins = pin_mask(s.get("pin", False))
     node.set_clock(s.get("start_at", 0))
     node.start(pins)
     check("start", node.take_tx(), s.get("on_start", []))
+    if "on_start_state" in s:
+        assert node.state() == s["on_start_state"], f"start: state {node.state()}"
 
     for i, step in enumerate(s["steps"]):
         where = f"step {i} at {step['at']} ms" + (f" ({step['note']})" if "note" in step else "")
@@ -90,6 +102,10 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             node.rx(parse(text))
         if "pin" in step:
             pins = pin_mask(step["pin"])
+        if "bus" in step:
+            node.set_bus(step["bus"])
+        if step.get("service", False):
+            node.service_press()
         node.loop(pins)
         check(where, node.take_tx(), step.get("expect", []))
 
@@ -97,6 +113,8 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             stored = node.store_get(key)
             wanted = None if value is None else bytes.fromhex(value)
             assert stored == wanted, f"{where}: store[{key!r}] = {stored!r}, expected {wanted!r}"
+        if "state" in step:
+            assert node.state() == step["state"], f"{where}: state {node.state()}"
         if "restarted" in step:
             assert node.restart_requested() is step["restarted"], f"{where}: restart"
         if "driven" in step:

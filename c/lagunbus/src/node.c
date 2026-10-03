@@ -13,6 +13,8 @@
 static void schedule_announce(lb_node_t *node);
 static void announce_booted(lb_node_t *node);
 static void system_defaults(lb_node_t *node);
+static void read_health(lb_node_t *node);
+static void report_state(lb_node_t *node);
 
 void lb_node_init(lb_node_t *node, lb_transport_t *bus, lb_platform_t *platform,
                   const lb_identity_t *identity, lb_endpoint_t *endpoints, uint8_t count)
@@ -181,6 +183,11 @@ static void announce_booted(lb_node_t *node)
 void lb_node_start(lb_node_t *node)
 {
     node->started_ms = node->platform->millis(node->platform->ctx);
+    /* Only the chip knows why it started; without the hook POWER_ON is the honest guess
+     * on a host, where every start is one. */
+    if (node->platform->reset_reason != NULL) {
+        node->reset_reason = node->platform->reset_reason(node->platform->ctx);
+    }
 
     /* 1. Configuration: the address from the persistent store. Its absence is the
      *    normal state of a first boot — the node will then announce itself. */
@@ -213,6 +220,12 @@ void lb_node_start(lb_node_t *node)
     } else {
         schedule_announce(node);
     }
+
+    /* 4. The first state report, so the LED does not wait for the first change — and the
+     *    bus read first, so a node alone on a dead cable starts as BUS_FAULT rather than
+     *    flashing NO_ADDRESS for one tick. */
+    read_health(node);
+    report_state(node);
 }
 
 /** How long a node waits for an ASSIGNMENT before it may try again (03-adresacja.md
@@ -388,7 +401,11 @@ static uint8_t diagnostics_read(lb_node_t *node, uint8_t element,
         if (!known) {
             return LB_RESULT_UNAVAILABLE;
         }
-        *len = lb_encode(LB_T_ENUM8, LB_NUM(state), out, cap);
+        *len = lb_encode(LB_T_ENUM8,
+                         LB_NUM(state == LB_BUS_OFF       ? LB_DIAG_BUS_OFF
+                                : state == LB_BUS_PASSIVE ? LB_DIAG_BUS_PASSIVE
+                                                          : LB_DIAG_BUS_ACTIVE),
+                         out, cap);
         break;
     case LB_DIAG_BUS_OFF_COUNT:
         *len = lb_encode(LB_T_U16, LB_NUM(node->bus_off_count), out, cap);
@@ -588,8 +605,17 @@ static uint8_t system_command(lb_node_t *node, uint8_t endpoint, uint8_t element
     return LB_RESULT_UNSUPPORTED_ELEMENT;
 }
 
-/** `Device` commands. Only `FactoryReset` so far — `Identify` and `Reboot` still answer
- * `UNSUPPORTED_ELEMENT`.
+/** `Device` commands — all three are mandatory (types/0x0001-device.md §3).
+ *
+ * `Identify` only sets a deadline: what the person sees is the device's business, told
+ * through the state watch (`LB_STATE_IDENTIFY`). A device without an LED still accepts it
+ * (COMPLIANCE.md LB-NODE-055). Until 2026-10-03 this answered `UNSUPPORTED_ELEMENT` while
+ * the hub's view sent it on `i` (zadania/CR-05.md); pinned by vectors/scenarios/identify.json.
+ *
+ * `Reboot` takes the factory reset's path without the wipe. Its `delay` is honoured, but
+ * never below `LB_RESET_GRACE_MS`: "0 = at once" is allowed by the type, yet a restart
+ * before the acknowledgement leaves the controller loses it, and the type itself says the
+ * delay exists so the sender learns the command arrived.
  *
  * `FactoryReset` is what the operator reaches for when the hub finds a node at an address
  * it does not know (06-cykl-zycia-urzadzenia.md §2.3): the node has to forget the
@@ -600,45 +626,162 @@ static uint8_t system_command(lb_node_t *node, uint8_t endpoint, uint8_t element
 static uint8_t device_command(lb_node_t *node, uint8_t element,
                               const uint8_t *args, uint8_t len)
 {
+    uint32_t now = node->platform->millis(node->platform->ctx);
+    lb_value_t v;
+
+    if (element == LB_DEV_CMD_IDENTIFY) {
+        if (len < 2 || !lb_decode(LB_T_U16, args, 2, &v) || v.absent) {
+            return LB_RESULT_INVALID_VALUE;
+        }
+        node->identifying = v.value != 0;
+        node->identify_until_ms = now + (uint32_t)v.value * 1000u;
+        return LB_RESULT_OK;
+    }
+    if (element == LB_DEV_CMD_REBOOT) {
+        if (len < 2 || !lb_decode(LB_T_U16, args, 2, &v) || v.absent) {
+            return LB_RESULT_INVALID_VALUE;
+        }
+        if (node->reset_pending && node->reset_wipe) {
+            return LB_RESULT_OK; /* a factory reset already on its way restarts anyway */
+        }
+        uint32_t delay = (uint32_t)v.value < LB_RESET_GRACE_MS ? LB_RESET_GRACE_MS
+                                                              : (uint32_t)v.value;
+        node->reset_pending = true;
+        node->reset_wipe = false;
+        node->reset_at_ms = now + delay;
+        return LB_RESULT_OK;
+    }
     if (element != LB_DEV_CMD_FACTORY_RESET) {
         return LB_RESULT_UNSUPPORTED_ELEMENT;
     }
-    lb_value_t magic;
-    if (len < 4 || !lb_decode(LB_T_U32, args, 4, &magic)
-        || (uint32_t)magic.value != LB_FACTORY_RESET_MAGIC) {
+    if (len < 4 || !lb_decode(LB_T_U32, args, 4, &v)
+        || (uint32_t)v.value != LB_FACTORY_RESET_MAGIC) {
         return LB_RESULT_INVALID_VALUE;
     }
-    node->reset_pending = true;
-    node->reset_at_ms = node->platform->millis(node->platform->ctx) + LB_RESET_GRACE_MS;
+    lb_node_factory_reset(node);
     return LB_RESULT_OK;
 }
 
-/** Carry out an acknowledged factory reset.
- *
- * The address goes first and into the persistent store: whatever happens next — a
- * restart, a power cut half-way — the node comes back without it and announces itself.
- * Only then the restart, which returns everything held in RAM to its defaults.
- */
-/** Returns true when the platform restarted — on a board it never returns at all; on a
- * host (the simulator) it does, and that boot is over: the caller sends nothing more. */
-static bool factory_reset(lb_node_t *node)
+void lb_node_factory_reset(lb_node_t *node)
 {
+    /* A second press, or the button during a hub's reset, changes nothing: the first
+     * deadline stands. A pending Reboot is upgraded — the wipe is what was asked for. */
+    if (!node->reset_pending) {
+        node->reset_at_ms = node->platform->millis(node->platform->ctx) + LB_RESET_GRACE_MS;
+    }
+    node->reset_pending = true;
+    node->reset_wipe = true;
+    /* Reported at once: from the hub this runs inside a tick that reports anyway, but the
+     * button calls it from the device's loop, and the LED should not wait for the tick. */
+    if (node->booted) {
+        report_state(node);
+    }
+}
+
+/** Carry out an acknowledged factory reset or `Reboot`.
+ *
+ * For a factory reset the address goes first and into the persistent store: whatever
+ * happens next — a restart, a power cut half-way — the node comes back without it and
+ * announces itself. Only then the restart, which returns everything held in RAM to its
+ * defaults. A `Reboot` keeps the address and only restarts.
+ *
+ * Returns true when the platform restarted — on a board it never returns at all; on a
+ * host (the simulator) it does, and that boot is over: the caller sends nothing more.
+ */
+static bool carry_out_reset(lb_node_t *node)
+{
+    bool wipe = node->reset_wipe;
     node->reset_pending = false;
-    node->address = LB_ADDRESS_UNASSIGNED;
-    if (node->platform->store != NULL) {
-        node->platform->store(node->platform->ctx, NVS_KEY_ADDRESS, &node->address,
-                              sizeof node->address);
+    node->reset_wipe = false;
+    if (wipe) {
+        node->address = LB_ADDRESS_UNASSIGNED;
+        if (node->platform->store != NULL) {
+            node->platform->store(node->platform->ctx, NVS_KEY_ADDRESS, &node->address,
+                                  sizeof node->address);
+        }
     }
     if (node->platform->restart != NULL) {
         node->platform->restart(node->platform->ctx);
         return true; /* on the board: never reached */
     }
-    /* Without a restart the system settings are all we can put back — the endpoints'
-     * defaults live in the application's arrays, not here. */
-    system_defaults(node);
-    node->join_attempts = 0;
-    schedule_announce(node);
+    /* Without a restart the node does what it can of one. What lives in RAM here goes
+     * back (an Identify in progress with it); the endpoints' defaults live in the
+     * application's arrays, not here. */
+    node->identifying = false;
+    if (wipe) {
+        system_defaults(node);
+        node->join_attempts = 0;
+        schedule_announce(node);
+        return false;
+    }
+    /* A Reboot as the bus sees one: a new boot, counted, announced with SOFTWARE. */
+    node->reset_reason = LB_RESET_SOFTWARE;
+    node->started_ms = node->platform->millis(node->platform->ctx);
+    node->boot_count++;
+    if (node->platform->store != NULL) {
+        node->platform->store(node->platform->ctx, "boot", &node->boot_count,
+                              sizeof node->boot_count);
+    }
+    if (node->address != LB_ADDRESS_UNASSIGNED) {
+        announce_booted(node);
+    } else {
+        node->join_attempts = 0;
+        schedule_announce(node);
+    }
     return false;
+}
+
+/** Ask the controller how the bus is, and count every entry into bus-off.
+ *
+ * At every tick, not on a timer: the ESP32 is out of bus-off in about 11 ms (128 x 11
+ * bits at 125 kbit/s), so anything slower would miss bus-offs and `BusOffCount` would
+ * undercount — and on the ESP32 the question is a copy of a struct the port reads every
+ * loop anyway. A port without `health` is taken as a healthy bus: there is nothing to
+ * show, and showing a fault without evidence would be worse. */
+static void read_health(lb_node_t *node)
+{
+    uint16_t tec = 0, rec = 0;
+    uint8_t state = LB_BUS_ACTIVE;
+    if (node->bus->health == NULL || !node->bus->health(node->bus->ctx, &tec, &rec, &state)) {
+        state = LB_BUS_ACTIVE;
+    }
+    if (state == LB_BUS_OFF && node->bus_state != LB_BUS_OFF) {
+        node->bus_off_count++;
+    }
+    node->bus_state = state;
+}
+
+/** The one state to show, by the priority of `lb_node_state_t` (node.h says why one). */
+static lb_node_state_t current_state(const lb_node_t *node)
+{
+    if (node->reset_pending) {
+        return LB_STATE_RESETTING;
+    }
+    if (node->identifying) {
+        return LB_STATE_IDENTIFY;
+    }
+    /* Warning is not a fault: the controller still works, it only counts errors. */
+    if (node->bus_state == LB_BUS_PASSIVE || node->bus_state == LB_BUS_OFF) {
+        return LB_STATE_BUS_FAULT;
+    }
+    if (node->address == LB_ADDRESS_UNASSIGNED) {
+        return LB_STATE_NO_ADDRESS;
+    }
+    return LB_STATE_READY;
+}
+
+/** Tell the state watch — on change only, and the first time always. */
+static void report_state(lb_node_t *node)
+{
+    lb_node_state_t state = current_state(node);
+    if (node->state_known && state == node->state) {
+        return;
+    }
+    node->state = state;
+    node->state_known = true;
+    if (node->on_state != NULL) {
+        node->on_state(node->state_ctx, state);
+    }
 }
 
 static void respond(lb_node_t *node, const lb_fields_t *f, uint8_t tid,
@@ -744,11 +887,16 @@ void lb_node_tick(lb_node_t *node)
         return; /* before Booted a node ANSWERS NOTHING (types/0x0001-device.md §5.1) */
     }
 
-    if (node->reset_pending
-        && (int32_t)(node->platform->millis(node->platform->ctx) - node->reset_at_ms) >= 0
-        && factory_reset(node)) {
-        return; /* restarted: an announcement now would come from a boot that is over */
+    uint32_t now = node->platform->millis(node->platform->ctx);
+    if (node->reset_pending && (int32_t)(now - node->reset_at_ms) >= 0
+        && carry_out_reset(node)) {
+        return; /* restarted: an announcement now would come from a boot that is over —
+                 * and the LED keeps RESETTING, the last thing it was told */
     }
+    if (node->identifying && (int32_t)(now - node->identify_until_ms) >= 0) {
+        node->identifying = false; /* Identify stops by itself (types/0x0001-device.md §3.1) */
+    }
+    read_health(node);
 
     /* Having no address is the only condition: a node that receives one stops meeting
      * it and thereby stops announcing. There is no separate "should I announce" flag,
@@ -764,7 +912,7 @@ void lb_node_tick(lb_node_t *node)
      * starve the deadlines on a flooded bus — hence the limit. */
     for (int i = 0; i < 16; i++) {
         if (!node->bus->recv(node->bus->ctx, &frame)) {
-            return;
+            break;
         }
         node->received++;
         if (node->on_frame != NULL) {
@@ -772,4 +920,17 @@ void lb_node_tick(lb_node_t *node)
         }
         handle_frame(node, &frame);
     }
+    report_state(node);
+}
+
+const char *lb_node_state_name(lb_node_state_t state)
+{
+    switch (state) {
+    case LB_STATE_RESETTING:  return "RESETTING";
+    case LB_STATE_IDENTIFY:   return "IDENTIFY";
+    case LB_STATE_BUS_FAULT:  return "BUS_FAULT";
+    case LB_STATE_NO_ADDRESS: return "NO_ADDRESS";
+    case LB_STATE_READY:      return "READY";
+    }
+    return "?";
 }

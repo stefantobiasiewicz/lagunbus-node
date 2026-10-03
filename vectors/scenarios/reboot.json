@@ -1,0 +1,23 @@
+{
+  "about": "Reboot (types/0x0001-device.md §3.2) — mandatory: acknowledged, carried out after `delay` ms (at least 50, so the acknowledgement leaves first), the address kept. Without a restart hook the node does what a restart looks like from the bus: Booted with LastResetReason SOFTWARE (3), the boot counted. A missing argument is INVALID_VALUE.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "on_start_state": "READY",
+  "steps": [
+    {"at": 100, "note": "no delay", "rx": ["06108001#02"], "expect": ["0E108001#32"]},
+    {"at": 200, "note": "1000 ms", "rx": ["06108001#01E803"], "expect": ["0E108001#01"],
+     "state": "RESETTING"},
+    {"at": 1199, "state": "RESETTING"},
+    {"at": 1200, "note": "Booted, sequence 1, SOFTWARE", "expect": ["02108001#010300010000"],
+     "state": "READY", "store": {"address": "4200", "boot": "0200"}},
+    {"at": 1210, "rx": ["0C108012#03"], "expect": ["0E108012#0303"]},
+    {"at": 1300, "note": "delay 0 still waits out the 50 ms", "rx": ["06108001#040000"],
+     "expect": ["0E108001#04"]},
+    {"at": 1349},
+    {"at": 1350, "expect": ["02108001#020300010000"]}
+  ]
+}

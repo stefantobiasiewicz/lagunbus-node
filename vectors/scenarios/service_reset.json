@@ -1,0 +1,21 @@
+{
+  "about": "The service button (zadania/CR-05.md): lb_node_factory_reset() takes the same path as FactoryReset from the hub, minus the reply — accepted at once, the state goes RESETTING (above IDENTIFY), carried out 50 ms later. Without a restart hook the node forgets the address and an Identify in progress, and joins again; jitter 1500.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "on_start_state": "READY",
+  "steps": [
+    {"at": 100, "rx": ["06108000#010500"], "expect": ["0E108000#01"], "state": "IDENTIFY"},
+    {"at": 200, "note": "the button: nothing goes on the bus", "service": true, "state": "RESETTING",
+     "store": {"address": "4200"}},
+    {"at": 249, "state": "RESETTING"},
+    {"at": 250, "note": "done: no address, Identify gone with the rest", "store": {"address": "0000"},
+     "state": "NO_ADDRESS"},
+    {"at": 1750, "expect": ["1FDB8A7E#7E8ADBF501"], "state": "NO_ADDRESS"},
+    {"at": 1800, "rx": ["1EDB8A7E#7E8ADBF54300"], "expect": ["0210C001#010000010000"],
+     "state": "READY"}
+  ]
+}

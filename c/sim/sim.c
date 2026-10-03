@@ -34,6 +34,29 @@ static bool s_recv(void *ctx, lb_frame_t *out)
 static uint32_t s_millis(void *ctx) { return ((lbs_t *)ctx)->clock; }
 
 static void s_restart(void *ctx) { ((lbs_t *)ctx)->restart_requested = true; }
+static uint8_t s_reset_reason(void *ctx) { return ((lbs_t *)ctx)->reset_reason; }
+
+static bool s_health(void *ctx, uint16_t *tec, uint16_t *rec, uint8_t *state)
+{
+    lbs_t *sim = ctx;
+    if (!sim->has_health) {
+        return false;
+    }
+    *tec = sim->tec;
+    *rec = sim->rec;
+    *state = sim->bus_state;
+    return true;
+}
+
+static void s_state(void *ctx, lb_node_state_t state)
+{
+    lbs_t *sim = ctx;
+    sim->state = (int)state;
+    sim->state_reports++;
+    lb_led_on_state(&sim->led, state); /* and on to the LED, as a board wires it */
+}
+
+static void s_led(void *ctx, bool on) { ((lbs_t *)ctx)->led_lit = on; }
 static uint32_t s_random(void *ctx) { return ((lbs_t *)ctx)->jitter; }
 
 static lbs_slot_t *s_slot(lbs_t *sim, const char *key, bool create)
@@ -196,8 +219,10 @@ lbs_t *lbs_create(const char *name, const uint8_t *uid, uint32_t jitter, uint8_t
     }
     sim->bus = (lb_transport_t){.send = s_send, .recv = s_recv, .ctx = sim};
     sim->platform = (lb_platform_t){
-        .millis = s_millis, .store = s_store, .load = s_load, .random = s_random, .ctx = sim,
+        .millis = s_millis, .store = s_store, .load = s_load, .random = s_random,
+        .reset_reason = s_reset_reason, .ctx = sim,
     };
+    sim->state = -1;
     sim->jitter = jitter;
     for (uint8_t i = 0; i < LBS_ENDPOINTS; i++) {
         sim->driven[i] = -1;
@@ -214,6 +239,9 @@ lbs_t *lbs_create(const char *name, const uint8_t *uid, uint32_t jitter, uint8_t
     memcpy(identity.uid, uid, LB_UID_LEN);
     lb_node_init(&sim->node, &sim->bus, &sim->platform, &identity, sim->endpoints,
                  sim->endpoint_count);
+    sim->node.on_state = s_state;
+    sim->node.state_ctx = sim;
+    lb_led_init(&sim->led, s_led, sim);
     return sim;
 }
 
@@ -291,6 +319,7 @@ void lbs_rx(lbs_t *sim, uint32_t can_id, const uint8_t *data, uint8_t len)
 void lbs_loop(lbs_t *sim, uint32_t pins)
 {
     lb_node_tick(&sim->node);
+    lb_led_tick(&sim->led, sim->clock);
     for (uint8_t i = 0; i < sim->endpoint_count; i++) {
         uint8_t n = sim->index[i];
         if (sim->role[i] == LBS_KEY) {
@@ -350,6 +379,30 @@ int lbs_output_on(const lbs_t *sim, int output)
     }
     return on_off != NULL && !on_off->value.absent && on_off->value.value != 0 ? 1 : 0;
 }
+
+void lbs_service_press(lbs_t *sim) { lb_node_factory_reset(&sim->node); }
+
+int lbs_state(const lbs_t *sim) { return sim->state; }
+
+bool lbs_led(const lbs_t *sim) { return sim->led_lit; }
+
+uint32_t lbs_state_reports(const lbs_t *sim) { return sim->state_reports; }
+
+const char *lbs_state_name(int state)
+{
+    return state < 0 ? NULL : lb_node_state_name((lb_node_state_t)state);
+}
+
+void lbs_set_bus(lbs_t *sim, uint8_t state)
+{
+    /* The health hook goes in on first use, so a device that never calls this keeps the
+     * port it always had — Diagnostics answering UNAVAILABLE (system.json pins that). */
+    sim->bus.health = s_health;
+    sim->has_health = true;
+    sim->bus_state = state;
+}
+
+void lbs_set_reset_reason(lbs_t *sim, uint8_t reason) { sim->reset_reason = reason; }
 
 uint16_t lbs_address(const lbs_t *sim) { return sim->node.address; }
 

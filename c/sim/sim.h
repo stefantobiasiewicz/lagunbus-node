@@ -21,6 +21,7 @@
 
 #include "lagunbus/node.h"
 #include "lagunbus/tools/debounce.h"
+#include "lagunbus/tools/led.h"
 #include "lagunbus/types/key.h"
 #include "lagunbus/types/output.h"
 
@@ -90,6 +91,18 @@ struct lbs {
     uint32_t   store_version; /**< bumped on every write, so Python saves only changes */
 
     bool restart_requested; /**< the node called `restart` — Python boots a new one */
+
+    /* The service button and the status LED (zadania/CR-05.md). The state is what the
+     * node REPORTED through `on_state`, not what it would compute — so a scenario checks
+     * the watch itself. */
+    int      state;         /**< the last reported `lb_node_state_t`, -1 before any */
+    uint32_t state_reports; /**< how many times `on_state` was called */
+    bool     has_health;    /**< the port answers `health` — off by default, as SocketCAN */
+    uint8_t  bus_state;     /**< what `health` answers: `LB_BUS_*` */
+    uint16_t tec, rec;
+    uint8_t  reset_reason;  /**< what the platform's `reset_reason` answers */
+    lb_led_t led;           /**< the status LED, through the library's own tool */
+    bool     led_lit;
 };
 
 /* --- for device definitions (devices.c) -------------------------------------------- */
@@ -162,6 +175,26 @@ uint32_t lbs_inputs_idle(const lbs_t *sim);
 int      lbs_output_count(const lbs_t *sim);
 int      lbs_driven(const lbs_t *sim, int output);
 int      lbs_output_on(const lbs_t *sim, int output);
+
+/** The service button: `lb_node_factory_reset()`, as a board calls it after the hold. */
+void lbs_service_press(lbs_t *sim);
+/** The last state the node reported to its state watch, -1 before any, and how many
+ * reports there have been. */
+int      lbs_state(const lbs_t *sim);
+uint32_t lbs_state_reports(const lbs_t *sim);
+const char *lbs_state_name(int state);
+/** The status LED as `lagunbus/tools/led.h` drives it — lit or not, at the last loop. */
+bool lbs_led(const lbs_t *sim);
+
+/** Give the port a `health`, answering `state` (`LB_BUS_*`) from now on. Without this
+ * call the port has none, like SocketCAN over a plain socket, and `Diagnostics` answers
+ * `UNAVAILABLE` for the controller's counters. */
+void lbs_set_bus(lbs_t *sim, uint8_t state);
+
+/** What the platform says the last restart was — read by the node at `lbs_start`.
+ * `LB_RESET_POWER_ON` until set; `lagun-sim` sets `LB_RESET_SOFTWARE` when it boots a
+ * new node after `restart`, as `esp_reset_reason()` would on a board. */
+void lbs_set_reset_reason(lbs_t *sim, uint8_t reason);
 
 uint16_t lbs_address(const lbs_t *sim);
 uint32_t lbs_short_id(const lbs_t *sim);

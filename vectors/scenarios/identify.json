@@ -1,0 +1,18 @@
+{
+  "about": "Identify (types/0x0001-device.md §3.1) — mandatory: acknowledged, then the node is IDENTIFY for `duration` seconds and stops by itself; 0 stops it at once; a missing argument is INVALID_VALUE. Until 2026-10-03 the library answered UNSUPPORTED_ELEMENT while the hub's view sent it on `i` (zadania/CR-05.md).",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "on_start_state": "READY",
+  "steps": [
+    {"at": 100, "note": "5 s", "rx": ["06108000#010500"], "expect": ["0E108000#01"], "state": "IDENTIFY"},
+    {"at": 5099, "state": "IDENTIFY"},
+    {"at": 5100, "note": "over by itself", "state": "READY"},
+    {"at": 6000, "note": "20 s", "rx": ["06108000#021400"], "expect": ["0E108000#02"], "state": "IDENTIFY"},
+    {"at": 7000, "note": "0 stops it", "rx": ["06108000#030000"], "expect": ["0E108000#03"], "state": "READY"},
+    {"at": 8000, "note": "no duration", "rx": ["06108000#04"], "expect": ["0E108000#34"], "state": "READY"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "about": "LastResetReason comes from the platform (`reset_reason`, on the ESP32 esp_reset_reason()) and goes into Booted and the attribute, with the values of types/0x0001-device.md §2.4 — BROWNOUT is 4. Until 2026-10-03 the C constants were shifted (SOFTWARE 1, BROWNOUT 3) and the node always said POWER_ON.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "reset_reason": "BROWNOUT",
+  "pin": false,
+  "on_start": ["02108001#000400010000"],
+  "steps": [
+    {"at": 100, "rx": ["0C108012#01"], "expect": ["0E108012#0104"]}
+  ]
+}

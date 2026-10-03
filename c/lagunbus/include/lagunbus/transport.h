@@ -17,10 +17,16 @@
 extern "C" {
 #endif
 
-/** Bus state as the controller sees it (`Diagnostics.BusState`).
+/** Bus state as the controller sees it.
  *
  * It lives here rather than with the node because it describes the BUS — and because
  * it is filled in by the port, which knows nothing about the node.
+ *
+ * **These are not the values of `Diagnostics.BusState`.** The attribute has three
+ * (`LB_DIAG_BUS_*` in node.h); the port has a fourth, `WARNING`, which the specification
+ * covers with `ErrorThreshold` instead, and the node maps it to `ACTIVE` on the way out.
+ * Until 2026-10-03 the node sent these as they were, so PASSIVE arrived as 2 — `BUS_OFF`
+ * to anyone reading the specification (zadania/CR-05.md, vectors/scenarios/bus_state.json).
  */
 #define LB_BUS_ACTIVE   0x00u
 #define LB_BUS_WARNING  0x01u

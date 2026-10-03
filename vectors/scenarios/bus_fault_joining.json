@@ -1,0 +1,14 @@
+{
+  "about": "BUS_FAULT ranks above NO_ADDRESS — a node alone on the cable gets no ACKs, goes error passive, and that is what its LED shows. The first health read is at the start, so the very first report is already the fault.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {},
+  "bus": "passive",
+  "pin": false,
+  "on_start": [],
+  "on_start_state": "BUS_FAULT",
+  "steps": [
+    {"at": 100, "bus": "active", "state": "NO_ADDRESS"}
+  ]
+}

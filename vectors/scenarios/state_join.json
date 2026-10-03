@@ -1,0 +1,16 @@
+{
+  "about": "The state watch for the status LED (zadania/CR-05.md): reported once at the start, then on change only. A node without an address is NO_ADDRESS while it announces, and READY from the call that takes its assignment — that same call sends Booted, so there is no state between the two. Random fixed at 1500, as in join.json.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {},
+  "pin": false,
+  "on_start": [],
+  "on_start_state": "NO_ADDRESS",
+  "steps": [
+    {"at": 1500, "expect": ["1FDB8A7E#7E8ADBF501"], "state": "NO_ADDRESS"},
+    {"at": 1600, "note": "assignment: address 0x042 and Booted in the same turn — READY at once",
+     "rx": ["1EDB8A7E#7E8ADBF54200"], "expect": ["02108001#000000010000"], "state": "READY"},
+    {"at": 5000, "state": "READY"}
+  ]
+}

@@ -59,6 +59,17 @@ static uint32_t m_random(void *ctx)
 static int restarts = 0;
 static uint16_t stored_address = 0xFFFFu;
 
+/* The state watch as an LED sees it: every call counted, the last state kept. */
+static int state_calls = 0;
+static lb_node_state_t last_state = LB_STATE_READY;
+
+static void m_state(void *ctx, lb_node_state_t state)
+{
+    (void)ctx;
+    state_calls++;
+    last_state = state;
+}
+
 static void m_restart(void *ctx)
 {
     (void)ctx;
@@ -723,6 +734,64 @@ int main(void)
         lb_node_tick(&board);
         LB_ASSERT(restarts == 1);
         LB_ASSERT(stored_address == LB_ADDRESS_UNASSIGNED);
+    }
+
+    LB_TEST("the state watch hears the start once, then changes only — not every tick");
+    {
+        bus_t m4 = {0};
+        lb_transport_t bus4 = {.send = m_send, .recv = m_recv, .ctx = &m4};
+        lb_platform_t plat4 = {.millis = m_millis, .ctx = &m4};
+        lb_node_t led;
+        lb_node_init(&led, &bus4, &plat4, &identity_cfg, endpoints, 1);
+        led.address = ADDRESS;
+        led.on_state = m_state;
+        state_calls = 0;
+        lb_node_start(&led);
+        LB_ASSERT(state_calls == 1 && last_state == LB_STATE_READY);
+
+        for (int i = 0; i < 100; i++) {
+            m4.clock += 10;
+            lb_node_tick(&led);
+        }
+        LB_ASSERT(state_calls == 1);
+
+        uint8_t five_s[] = {5, 0};
+        push_frame(&m4, LB_KIND_COMMAND, ADDRESS, 0, LB_DEV_CMD_IDENTIFY, 1, five_s, 2);
+        lb_node_tick(&led);
+        lb_node_tick(&led);
+        LB_ASSERT(state_calls == 2 && last_state == LB_STATE_IDENTIFY);
+    }
+
+    LB_TEST("the button reports RESETTING at once, without waiting for a tick");
+    {
+        bus_t m5 = {0};
+        lb_transport_t bus5 = {.send = m_send, .recv = m_recv, .ctx = &m5};
+        lb_platform_t plat5 = {.millis = m_millis, .ctx = &m5};
+        lb_node_t button;
+        lb_node_init(&button, &bus5, &plat5, &identity_cfg, endpoints, 1);
+        button.address = ADDRESS;
+        button.on_state = m_state;
+        lb_node_start(&button);
+        state_calls = 0;
+        lb_node_factory_reset(&button);
+        LB_ASSERT(state_calls == 1 && last_state == LB_STATE_RESETTING);
+        lb_node_factory_reset(&button); /* a second press: the same state, no report */
+        LB_ASSERT(state_calls == 1);
+        LB_ASSERT(m5.sent == 1); /* Booted only — the button puts nothing on the bus */
+    }
+
+    LB_TEST("no state watch: nothing is called and nothing breaks");
+    {
+        bus_t m6 = {0};
+        lb_transport_t bus6 = {.send = m_send, .recv = m_recv, .ctx = &m6};
+        lb_platform_t plat6 = {.millis = m_millis, .ctx = &m6};
+        lb_node_t quiet;
+        lb_node_init(&quiet, &bus6, &plat6, &identity_cfg, endpoints, 1);
+        lb_node_start(&quiet);
+        lb_node_factory_reset(&quiet);
+        m6.clock += LB_RESET_GRACE_MS;
+        lb_node_tick(&quiet);
+        LB_ASSERT(quiet.state == LB_STATE_NO_ADDRESS);
     }
 
     LB_SUMMARY();
