@@ -7,8 +7,8 @@
  *
  * A device here is what a board's application is minus the hardware: its endpoints with
  * the attributes it chooses to expose, and the decisions of its board (bounce window,
- * polarity, the key's own timings). `key` and `output` copy the boards in `devices/apps/`
- * where noted; the rest are variants a scenario or a demonstration needs.
+ * polarity, the key's own timings). `key`, `key3`, `output` and `out8` copy the boards in
+ * `devices/apps/` where noted; the rest are variants a scenario or a demonstration needs.
  *
  * Adding a device: a function below and a line in `lbs_devices`. Nothing else — the
  * endpoint numbers (4, 5, …), channels and hooks come from `lbs_add_key` /
@@ -94,6 +94,27 @@ static void panel3(lbs_t *sim, uint8_t channels)
     }
 }
 
+/** As `devices/apps/key3`: three keys with RAW and HOLD and no multi-click — a
+ * combination no other device here has, which is why it has a scenario of its own
+ * (`key3.json`). A model of its own too: `DeviceType` names the model, not the
+ * endpoint type (types/0x0001-device.md §2.6; zadania/zrobione/FEAT-09.md, N3). */
+static void key3(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t attrs[] = {
+        LB_KEY_ATTR_PRESS_COUNT(),
+        LB_KEY_ATTR_EVENT_MODE(),
+        LB_KEY_ATTR_HOLD_ENABLED(),
+        LB_KEY_ATTR_HOLD_THRESHOLD(500),
+        LB_KEY_ATTR_HOLD_TICK_INTERVAL(200),
+    };
+    key_board(sim);
+    sim->device_type = 0x0011;
+    for (int i = 0; i < 3; i++) {
+        lbs_add_key(sim, LB_KEY_F_RAW | LB_KEY_F_HOLD, attrs, LBS_COUNT(attrs));
+    }
+}
+
 /* --- outputs ------------------------------------------------------------------------ */
 
 /** As `devices/apps/output`: a relay module that switches on a LOW pin (`Invert`), and
@@ -143,6 +164,27 @@ static void output8(lbs_t *sim, uint8_t channels)
     }
 }
 
+/** As `devices/apps/out8`: eight outputs on an MCP23017, LEDs for now, lit by a HIGH pin
+ * (no `Invert`); otherwise the settings of `output`. No scenario: eight outputs are
+ * `output8.json`'s, these settings `output.json`'s — nothing here is a new case. */
+static void out8(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t attrs[] = {
+        {LB_OUT_ON_OFF,             LB_T_BOOL,  LB_RO,              LB_NUM(0)},
+        {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
+        {LB_OUT_INVERT,             LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(0)},
+        {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
+        {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
+        {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
+    };
+    output_board(sim);
+    sim->device_type = 0x0021;
+    for (int i = 0; i < 8; i++) {
+        lbs_add_output(sim, attrs, LBS_COUNT(attrs));
+    }
+}
+
 /* --- the catalogue ------------------------------------------------------------------ */
 
 const lbs_device_t lbs_devices[] = {
@@ -150,9 +192,11 @@ const lbs_device_t lbs_devices[] = {
     {"bell",      "a doorbell key: one event per press, nothing to tune",    bell,      0},
     {"key_fixed", "one key with hold and multiclick on its own timings",     key_fixed, 0},
     {"panel3",    "a wall switch with three keys",                           panel3,    0},
+    {"key3",      "three keys as devices/apps/key3: click, raw, hold",       key3,      0},
     {"output",    "relays as devices/apps/output",                           output,    LBS_ENDPOINTS},
     {"output2",   "two relays that remember their state",                    output2,   0},
     {"output8",   "eight relays that remember their state",                  output8,   0},
+    {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
 };
 
 const size_t lbs_device_total = sizeof lbs_devices / sizeof lbs_devices[0];

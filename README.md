@@ -118,10 +118,11 @@ languages, so the identifier, header and join vectors are parametrised `[python]
 
 A **scenario** is a device from the catalogue (`c/sim/devices.c`), a starting store, and
 steps. The catalogue is the simulator's too, so every device `lagun-sim` offers is one a
-scenario checks: `key` (every feature, every timing tunable), `bell` (no features, no
+scenario can check: `key` (every feature, every timing tunable), `bell` (no features, no
 attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings),
-`panel3` (three keys), `output` (as `devices/apps/output`), `output2` and `output8`
-(outputs that keep their own state). `key` and `output` also come in 1 … 8 channels
+`panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
+`output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
+state), `out8` (as `devices/apps/out8`). `key` and `output` also come in 1 … 8 channels
 (`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
 one, the board they copy, is the default. Each step sets the clock, hands the node frames,
 sets the input pins (`pin` — one level, or a list for several inputs), and runs one turn
@@ -138,8 +139,11 @@ means the node is wrong or the spec can be read two ways; the second goes to a d
 straight away (`zadania/README.md`).
 
 Adding behaviour: write the scenario first, see it fail, make it pass. Adding a device:
-a function and a line in `c/sim/devices.c`, and a scenario for it — for one that comes
-in sizes, a scenario with more than one channel too.
+a function and a line in `c/sim/devices.c`, and a scenario **only for a case no scenario
+covers yet** — a feature combination, a setting or a size nothing else exercises. A device
+that only recombines what is already checked (eight outputs, a key with the known
+features) needs none: the scenario would test the same library code a second time and
+pin nothing new (zadania/zrobione/FEAT-09.md).
 
 ## Decisions
 

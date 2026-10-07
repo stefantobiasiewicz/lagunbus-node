@@ -14,7 +14,17 @@ UID = bytes.fromhex("A1B2C3D400010203")
 
 def test_the_catalogue_lists_every_device_with_a_description() -> None:
     names = [d.name for d in devices()]
-    assert names == ["key", "bell", "key_fixed", "panel3", "output", "output2", "output8"]
+    assert names == [
+        "key",
+        "bell",
+        "key_fixed",
+        "panel3",
+        "key3",
+        "output",
+        "output2",
+        "output8",
+        "out8",
+    ]
     assert all(d.about for d in devices())
 
 

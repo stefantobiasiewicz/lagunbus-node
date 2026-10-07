@@ -1,0 +1,40 @@
+{
+  "about": "The key3 device of the simulator's catalogue (c/sim/devices.c), as devices/apps/key3: three keys on endpoints 4, 5, 6, features RAW and HOLD, NO MULTICLICK — a combination no other device has. EventMode then switches between CLICK and RAW only: MULTICLICK is a value out of range (types/0x0010-key-input.md §2.3), and the multi-click attributes belong to an undeclared feature. With no multi-click window a Click comes right after the release. DeviceType 0x0011 is the model (zadania/zrobione/FEAT-09.md, N3). A LOW pin is a press.",
+  "profile": "key3",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": [true, true, true],
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 30, "note": "DeviceType 0x0011", "rx": ["0C108002#03"], "expect": ["0E108002#031100"]},
+
+    {"at": 100, "note": "EventMode = MULTICLICK on endpoint 5: INVALID_VALUE",
+     "rx": ["0A108511#0101"], "expect": ["0E108511#31"]},
+    {"at": 110, "note": "MaxClicks belongs to MULTICLICK: UNSUPPORTED_FEATURE",
+     "rx": ["0C108513#02"], "expect": ["0E108513#1A"]},
+    {"at": 120, "note": "EventMode = RAW on endpoint 6 only",
+     "rx": ["0A108611#0302"], "expect": ["0E108611#03"]},
+
+    {"at": 1000, "note": "the third key, in RAW", "pin": [true, true, false]},
+    {"at": 1015, "note": "Down", "expect": ["02108601#00"]},
+    {"at": 1100, "pin": [true, true, true]},
+    {"at": 1115, "note": "Up with 100 ms held", "expect": ["02108602#016400"]},
+
+    {"at": 2000, "note": "the first key held, in CLICK", "pin": [false, true, true]},
+    {"at": 2015, "note": "no Down outside RAW"},
+    {"at": 2514},
+    {"at": 2515, "note": "HoldStart at 500 ms", "expect": ["02108405#00"]},
+    {"at": 2715, "expect": ["02108406#01BC02"]},
+    {"at": 2800, "pin": [true, true, true]},
+    {"at": 2815, "note": "HoldEnd, no Click", "expect": ["02108407#022003"]},
+
+    {"at": 3000, "note": "the second key, still CLICK: the refused write never landed",
+     "pin": [true, false, true]},
+    {"at": 3015},
+    {"at": 3100, "pin": [true, true, true]},
+    {"at": 3114},
+    {"at": 3115, "note": "Click x1 at once — no multi-click window to wait out",
+     "expect": ["02108503#0001"]}
+  ]
+}
