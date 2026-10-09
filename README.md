@@ -315,6 +315,43 @@ they were, and the hub agreed — both against the specification, where PASSIVE 
 `bus_fault*.json`, `bus_state.json`, `reboot*.json`, `reset_reason.json`, the states added to
 `factory_reset*.json`, and `c/tests/test_led.c`, `test_service.c`.
 
+### The deduplication buffer: sixteen entries, only `OK` (2026-10-09)
+
+A command repeated with the same `Tid`, endpoint and command number within 300 ms of
+being carried out gets the remembered reply and is not carried out again
+(`04-interakcje.md` §2.2). Until now the node had no buffer, and a reply late by more
+than 100 ms made a key's `Toggle` switch the light twice (zadania/zrobione/BUG-02.md).
+
+**Sixteen entries, not eight** (`LB_DEDUP_ENTRIES`, overridable at compile time). The
+specification said "eight, as many as there are `Tid` values" — true only if `Tid` were
+counted per node. It is counted per endpoint and command (the hub's `TidAllocator`, and
+the specification's own "the budget is not shared within a node"), so an `out8` whose
+eight outputs one key switches gets eight commands at once, and a ninth right after
+pushed the first out while its retry could still come. The specification now says "at
+least eight, every command of the window; sensibly two per endpoint that takes
+commands". A wider `Tid` was rejected there: the only room is the result's bits, and it
+would not help — the shortage is the number of keys, not the width of the number.
+
+**Only `OK` goes in.** A refusal in the buffer would answer a retry after `BUSY` with
+`BUSY` for the whole window; any other refusal repeats itself anyway. A command reply
+carries no data, so an entry holds no result at all — the key and when, 8 bytes.
+
+**The window counts from the execution; a retry does not move it.** Otherwise the third
+attempt (200 ms) would keep the entry until 500 ms and eat into the `Tid` reserve.
+
+**A full buffer pushes out an expired entry first, then the oldest live one — never
+`BUSY`.** The hub retries after `BUSY` at once, so three attempts would be gone in a few
+milliseconds and the command lost. Sized as above, a live entry is not pushed out.
+
+**Every addressed command goes through it, `Device` ones too** — the check stands before
+the dispatch. A repeated `Reboot` would otherwise move the restart. Reads and writes do
+not: repeated, they do the same again.
+
+**Pinned by** `vectors/scenarios/command_dedup.json`: retries 100, 200, 299 ms later
+answered from the buffer; 300 ms after the execution carried out again; the key is all
+three; eight `Tid` in a row to one command none swallowed; nine commands in the window
+and a retry of the first; a repeated `Reboot` that does not move the restart.
+
 ## The registry
 
 ```sh
@@ -337,9 +374,6 @@ hardware.
 
 **Transactions on the node side:**
 
-- `Tid` from the header byte and a deduplication buffer: **8 entries, 300 ms**. Only
-  commands carried out with `OK` go into it. A refusal in the buffer would make a retry
-  after `BUSY` get `BUSY` forever;
 - `BUSY` when the node cannot act right now, with the right to retry (the fault overlay
   can answer `BUSY` on the node's behalf, but the node itself never does);
 - a prioritised transmit queue: on overflow the oldest `REPORT` goes, never a

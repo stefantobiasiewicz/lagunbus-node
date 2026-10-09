@@ -55,6 +55,22 @@ extern "C" {
  * would not know whether the reset happened. */
 #define LB_RESET_GRACE_MS        50u
 
+/** The deduplication buffer (04-interakcje.md §2.2): a command repeated with the same
+ * `Tid`, endpoint and command number within `LB_DEDUP_WINDOW_MS` of being carried out is
+ * answered from here and not carried out again.
+ *
+ * The specification asks for at least eight entries and enough for every command of the
+ * window. Eight is NOT enough here: the hub counts `Tid` per endpoint and command, so an
+ * `out8` whose eight outputs one key switches at once gets eight commands in one go, and
+ * a ninth right after would push the first out while its retry may still come
+ * (README § Decisions, zadania/zrobione/BUG-02.md). Sixteen holds two such series — "two per
+ * endpoint that takes commands", as the specification suggests. A device with more
+ * endpoints sets it at compile time. 8 bytes an entry. */
+#ifndef LB_DEDUP_ENTRIES
+#define LB_DEDUP_ENTRIES   16u
+#endif
+#define LB_DEDUP_WINDOW_MS 300u
+
 /** `Diagnostics` (ep1) and `Groups` (ep2) elements.
  *
  * These two endpoints are served by **the node itself**, just like `Device`: they are
@@ -169,6 +185,18 @@ typedef struct {
     uint16_t report_hysteresis;
 } lb_reporting_t;
 
+/** One command carried out with `OK` — the key and when.
+ *
+ * No result: only `OK` goes in (README § Decisions), and a command reply carries no
+ * data, so the remembered reply is always the bare `OK`. */
+typedef struct {
+    uint32_t at_ms;    /**< when it was CARRIED OUT; a retry does not move it */
+    uint8_t  tid;
+    uint8_t  endpoint;
+    uint8_t  command;
+    bool     used;
+} lb_dedup_t;
+
 typedef struct {
     lb_transport_t *bus;
     lb_platform_t  *platform;
@@ -196,6 +224,9 @@ typedef struct {
     bool     reset_pending;
     bool     reset_wipe;
     uint32_t reset_at_ms;
+
+    /** Commands of the last `LB_DEDUP_WINDOW_MS` — see `LB_DEDUP_ENTRIES`. */
+    lb_dedup_t dedup[LB_DEDUP_ENTRIES];
 
     /** `Identify` runs while this is in the future (modulo 2^32, like every deadline). */
     bool     identifying;

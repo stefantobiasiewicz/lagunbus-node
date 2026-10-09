@@ -784,6 +784,62 @@ static void report_state(lb_node_t *node)
     }
 }
 
+/** Was this command carried out within the window? (04-interakcje.md §2.2)
+ *
+ * The age is `now - at_ms` modulo 2^32, like every deadline here; `dedup_expire` empties
+ * old entries at every tick, so an entry 49 days old cannot come back to life when
+ * `millis()` wraps. */
+static bool dedup_seen(const lb_node_t *node, uint8_t tid, uint8_t endpoint,
+                       uint8_t command, uint32_t now)
+{
+    for (unsigned i = 0; i < LB_DEDUP_ENTRIES; i++) {
+        const lb_dedup_t *e = &node->dedup[i];
+        if (e->used && e->tid == tid && e->endpoint == endpoint && e->command == command
+            && now - e->at_ms < LB_DEDUP_WINDOW_MS) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Remember a command carried out with `OK`.
+ *
+ * Into a free or expired entry first; only when every entry is still inside the window
+ * does the oldest go — the one whose retries are most likely over. The alternative,
+ * `BUSY` until an entry expires, was rejected: the hub retries after `BUSY` at once, so
+ * three attempts would be gone in a few milliseconds and the command lost
+ * (README § Decisions, zadania/zrobione/BUG-02.md). With `LB_DEDUP_ENTRIES` sized as the
+ * specification asks, eviction of a live entry does not happen. */
+static void dedup_remember(lb_node_t *node, uint8_t tid, uint8_t endpoint,
+                           uint8_t command, uint32_t now)
+{
+    lb_dedup_t *slot = &node->dedup[0];
+    for (unsigned i = 0; i < LB_DEDUP_ENTRIES; i++) {
+        lb_dedup_t *e = &node->dedup[i];
+        if (!e->used || now - e->at_ms >= LB_DEDUP_WINDOW_MS) {
+            slot = e;
+            break;
+        }
+        if (now - e->at_ms > now - slot->at_ms) {
+            slot = e;
+        }
+    }
+    slot->used = true;
+    slot->at_ms = now;
+    slot->tid = tid;
+    slot->endpoint = endpoint;
+    slot->command = command;
+}
+
+static void dedup_expire(lb_node_t *node, uint32_t now)
+{
+    for (unsigned i = 0; i < LB_DEDUP_ENTRIES; i++) {
+        if (node->dedup[i].used && now - node->dedup[i].at_ms >= LB_DEDUP_WINDOW_MS) {
+            node->dedup[i].used = false;
+        }
+    }
+}
+
 static void respond(lb_node_t *node, const lb_fields_t *f, uint8_t tid,
                       uint8_t result, const uint8_t *data, uint8_t len)
 {
@@ -850,8 +906,17 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
                                       (uint8_t)(frame->len - 1u));
         }
     } else if (f.kind == LB_KIND_COMMAND) {
+        /* A retry of a command already carried out gets the remembered reply and nothing
+         * else — a second `Toggle` would put the light back where it was
+         * (04-interakcje.md §2.2). Every addressed command goes through here, `Device`
+         * ones included: a repeated `Reboot` would otherwise move the restart. Reads and
+         * writes do not: repeated, they do the same thing again. */
+        uint32_t now = node->platform->millis(node->platform->ctx);
         lb_endpoint_t *ep = lb_node_endpoint(node, f.endpoint);
-        if (f.endpoint < LB_EP_FIRST_USER) {
+        bool repeated = dedup_seen(node, tid, f.endpoint, f.element, now);
+        if (repeated) {
+            result = LB_RESULT_OK;
+        } else if (f.endpoint < LB_EP_FIRST_USER) {
             result = f.endpoint == LB_EP_DEVICE
                   ? device_command(node, f.element, frame->data + 1,
                                    (uint8_t)(frame->len - 1u))
@@ -863,6 +928,13 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
         } else {
             result = ep->on_command(ep, f.element, frame->data + 1,
                                    (uint8_t)(frame->len - 1u));
+        }
+        /* Only `OK` is remembered (README § Decisions): a refusal in the buffer would
+         * answer a retry after `BUSY` with `BUSY` for the whole window, and every other
+         * refusal repeats itself anyway. A repeat is not stored again: that would
+         * stretch its window from the first execution to the last retry. */
+        if (!repeated && result == LB_RESULT_OK) {
+            dedup_remember(node, tid, f.endpoint, f.element, now);
         }
     } else {
         return; /* not for us: reports, events, other nodes' replies */
@@ -897,6 +969,7 @@ void lb_node_tick(lb_node_t *node)
         node->identifying = false; /* Identify stops by itself (types/0x0001-device.md §3.1) */
     }
     read_health(node);
+    dedup_expire(node, now);
 
     /* Having no address is the only condition: a node that receives one stops meeting
      * it and thereby stops announcing. There is no separate "should I announce" flag,
