@@ -29,8 +29,13 @@ extern "C" {
 #define LB_POWER_ON_ON       1u
 #define LB_POWER_ON_RESTORE  2u
 
-/** Set the physical output. `Invert` has already been applied — this is the pin
- * level. */
+/** Set the physical output. `level` is the state of the COIL, with `Invert` already
+ * applied when the endpoint has it.
+ *
+ * `Invert` is installation only — the receiver wired to the normally-closed contact.
+ * The polarity of the board's own drive (a relay that switches on a LOW pin) is build:
+ * the application inverts the pin here, and nothing on the bus can overwrite it
+ * (types/0x0020-output.md §5.6; README.md § Decisions). */
 typedef void (*lb_output_drive_fn)(void *ctx, bool level);
 
 typedef struct {
@@ -55,7 +60,7 @@ void lb_output_init(lb_output_t *out, lb_node_t *node, lb_endpoint_t *endpoint,
 /** Handle an `On`/`Off`/`Toggle` command. Returns the result code for the reply. */
 uint8_t lb_output_command(lb_output_t *out, uint8_t element);
 
-/** Set the state directly. `true` = on (before `Invert` is taken into account). */
+/** Set the state directly. `true` = the receiver on (before `Invert`). */
 void lb_output_set(lb_output_t *out, bool state);
 
 /** Counts down `AutoOffTime` and releases held-back reports. Call it in the loop. */

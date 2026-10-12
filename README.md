@@ -352,6 +352,28 @@ answered from the buffer; 300 ms after the execution carried out again; the key 
 three; eight `Tid` in a row to one command none swallowed; nine commands in the window
 and a retry of the first; a repeated `Reboot` that does not move the restart.
 
+### The output drives the coil; the board's polarity is the application's (2026-10-13)
+
+`Output.Invert` used to be both things at once: the polarity of the board's relay drive
+(`devices/apps/output` switches on a LOW pin, so it set `Invert = 1`) and the receiver
+wired to the normally-closed contact. The first is build — it never changes and the hub
+has no reason to know it — yet it was writable from the bus: one wrong write, or a
+`nodes.yaml` entry, and the relay ran backwards while every attribute looked right.
+The specification now splits them (`types/0x0020-output.md` §5.6, zadania/CR-04.md N7).
+
+**`drive` gets the coil state.** The library still applies `Invert` when the endpoint has
+it — that is installation, an optional attribute. A board whose relay is LOW-active inverts
+the pin in its own `drive` callback, and does not declare `Invert` unless its terminals
+offer the normally-closed contact. Rejected: a polarity flag in `lb_output_init` — it
+would be one more thing the library decides for the board, and a single `!` in the
+callback says the same.
+
+**The simulator's `output` and `out8` profiles have no `Invert`**, so their `driven` is
+the coil state, equal to `OnOff`; `output2`/`output8` keep it as a module with the
+normally-closed contact. Pinned by `vectors/scenarios/output.json` (a write of `Invert`
+is `UNSUPPORTED_ELEMENT`) and `output_channels.json` (the attribute exists there);
+the inverted path itself by `c/tests/test_output.c`.
+
 ## The registry
 
 ```sh

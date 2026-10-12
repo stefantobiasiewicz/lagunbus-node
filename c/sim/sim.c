@@ -361,7 +361,8 @@ int lbs_driven(const lbs_t *sim, int output)
     return output >= 0 && output < LBS_ENDPOINTS ? sim->driven[output] : -1;
 }
 
-/** `OnOff` of output `output` — the state, before `Invert`. -1 past the last output. */
+/** `OnOff` of output `output` — the receiver's state, before `Invert`. -1 past the last
+ * output. */
 int lbs_output_on(const lbs_t *sim, int output)
 {
     if (output < 0 || output >= sim->output_count) {

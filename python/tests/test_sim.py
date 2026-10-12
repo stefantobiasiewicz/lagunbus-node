@@ -72,12 +72,13 @@ def test_the_store_comes_out_whole_and_says_when_it_changed() -> None:
     assert device.store_items()["output5"] == b"\x01"
 
 
-def test_output_on_is_the_state_and_driven_the_pin() -> None:
-    """`output` has Invert: on is a LOW pin."""
+def test_output_on_is_the_state_and_driven_the_coil() -> None:
+    """`output` has no Invert (zadania/CR-04.md, N7): its LOW-active relay is the
+    application's affair, so the library drives the coil state — the same as `OnOff`."""
     device = SimDevice("output", UID)
     device.store_put("address", b"\x42\x00")
     device.start(0)
-    assert (device.output_on(0), device.driven(0)) == (False, 1)
+    assert (device.output_on(0), device.driven(0)) == (False, 0)
     device.rx(Frame(0x06108401, b"\x01"))
     device.loop(0)
-    assert (device.output_on(0), device.driven(0)) == (True, 0)
+    assert (device.output_on(0), device.driven(0)) == (True, 1)

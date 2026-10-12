@@ -118,14 +118,14 @@ int main(void)
         LB_ASSERT(bounces == after_first);
     }
 
-    printf("\nInvert — a relay driven by a low level\n");
+    printf("\nInvert — the receiver on the normally-closed contact\n");
 
-    LB_TEST("on means the pin goes down, and the attribute still tells the truth");
+    LB_TEST("on means the coil goes off, and the attribute still tells the truth");
     {
         set_attr(LB_OUT_INVERT, 1);
         turn_on(true);
         lb_output_command(&out, LB_OUT_CMD_ON);
-        LB_ASSERT(pin == false); /* inverted */
+        LB_ASSERT(pin == false); /* coil off: the closed contact lights it */
         LB_ASSERT(lb_endpoint_attr(&endpoints[0], LB_OUT_ON_OFF)->value.value == 1);
         set_attr(LB_OUT_INVERT, 0);
     }

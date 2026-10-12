@@ -271,7 +271,8 @@ class SimDevice:
         return int(self.lib.lbs_output_count(self._h))
 
     def driven(self, output: int = 0) -> int | None:
-        """The last pin level output `output` drove (after `Invert`), `None` before any."""
+        """The last coil level output `output` drove (after `Invert`, where the endpoint has
+        it), `None` before any."""
         level = int(self.lib.lbs_driven(self._h, output))
         return None if level < 0 else level
 

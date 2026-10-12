@@ -117,15 +117,15 @@ static void key3(lbs_t *sim, uint8_t channels)
 
 /* --- outputs ------------------------------------------------------------------------ */
 
-/** As `devices/apps/output`: a relay module that switches on a LOW pin (`Invert`), and
- * reports no more often than every 200 ms — 1 … 8 of them; one, as the board, is the
- * default. */
+/** As `devices/apps/output`: a relay module that reports no more often than every
+ * 200 ms — 1 … 8 of them; one, as the board, is the default. Its relay switches on a LOW
+ * pin, but that is build: the application inverts the pin, the library drives the coil
+ * state, and there is no `Invert` for the hub to overwrite (zadania/CR-04.md, N7). */
 static void output(lbs_t *sim, uint8_t channels)
 {
     static const lb_attr_t attrs[] = {
         {LB_OUT_ON_OFF,             LB_T_BOOL,  LB_RO,              LB_NUM(0)},
         {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
-        {LB_OUT_INVERT,             LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(1)},
         {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
         {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
         {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
@@ -136,7 +136,9 @@ static void output(lbs_t *sim, uint8_t channels)
     }
 }
 
-/** Outputs that restore their state after a power cut, no `Invert`, no `ReportMinGap`. */
+/** Outputs that restore their state after a power cut, no `ReportMinGap`. A module with
+ * the normally-closed contact on its terminals, so it has `Invert` — an installation
+ * setting (types/0x0020-output.md §5.6) — off by default. */
 static const lb_attr_t output_restore[] = {
     {LB_OUT_ON_OFF,             LB_T_BOOL,  LB_RO,              LB_NUM(0)},
     {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_RESTORE)},
@@ -164,8 +166,8 @@ static void output8(lbs_t *sim, uint8_t channels)
     }
 }
 
-/** As `devices/apps/out8`: eight outputs on an MCP23017, LEDs for now, lit by a HIGH pin
- * (no `Invert`); otherwise the settings of `output`. No scenario: eight outputs are
+/** As `devices/apps/out8`: eight outputs on an MCP23017, LEDs for now, lit by a HIGH pin;
+ * otherwise the settings of `output`, without `Invert`. No scenario: eight outputs are
  * `output8.json`'s, these settings `output.json`'s — nothing here is a new case. */
 static void out8(lbs_t *sim, uint8_t channels)
 {
@@ -173,7 +175,6 @@ static void out8(lbs_t *sim, uint8_t channels)
     static const lb_attr_t attrs[] = {
         {LB_OUT_ON_OFF,             LB_T_BOOL,  LB_RO,              LB_NUM(0)},
         {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
-        {LB_OUT_INVERT,             LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(0)},
         {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
         {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
         {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
