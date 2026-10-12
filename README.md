@@ -374,6 +374,14 @@ normally-closed contact. Pinned by `vectors/scenarios/output.json` (a write of `
 is `UNSUPPORTED_ELEMENT`) and `output_channels.json` (the attribute exists there);
 the inverted path itself by `c/tests/test_output.c`.
 
+**A write of `Invert` moves the coil at once** (`lb_output_write`, wired into the
+endpoint's `on_write`; zadania/zrobione/BUG-07.md). `OnOff` describes the receiver, so when the
+contact it hangs on changes, the coil has to follow to keep the receiver where it was;
+until 2026-10-13 it waited for the next command, and the receiver sat switched while
+`OnOff` said otherwise. Nothing is reported — the receiver did not change. An application
+whose output has `Invert` has to wire `lb_output_write` in; today none does (`output2`
+and `output8` of the simulator do). Pinned by `output_channels.json` and `test_output.c`.
+
 ## The registry
 
 ```sh

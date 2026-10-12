@@ -63,6 +63,15 @@ uint8_t lb_output_command(lb_output_t *out, uint8_t element);
 /** Set the state directly. `true` = the receiver on (before `Invert`). */
 void lb_output_set(lb_output_t *out, bool state);
 
+/** React to a write that has already landed — wire it into the endpoint's `on_write`.
+ *
+ * Only `Invert` needs anything: `OnOff` describes the receiver, so when the contact it
+ * hangs on changes, the coil has to move AT ONCE to keep the receiver where it was.
+ * Waiting for the next command left the receiver switched while `OnOff` said otherwise
+ * (zadania/zrobione/BUG-07.md). The receiver does not change, so nothing is reported.
+ * Every other setting is read when it is used, so the rest is just `LB_RESULT_OK`. */
+uint8_t lb_output_write(lb_output_t *out, uint8_t element, lb_value_t value);
+
 /** Counts down `AutoOffTime` and releases held-back reports. Call it in the loop. */
 void lb_output_tick(lb_output_t *out, uint32_t now_ms);
 

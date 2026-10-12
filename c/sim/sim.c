@@ -112,6 +112,12 @@ static void s_drive(void *ctx, bool level)
     ch->sim->driven[ch->index] = level ? 1 : 0;
 }
 
+static uint8_t s_write(lb_endpoint_t *self, uint8_t element, lb_value_t value)
+{
+    lbs_channel_t *ch = self->ctx;
+    return lb_output_write(&ch->sim->outputs[ch->index], element, value);
+}
+
 static uint8_t s_command(lb_endpoint_t *self, uint8_t element, const uint8_t *args,
                          uint8_t len)
 {
@@ -164,6 +170,7 @@ bool lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
     }
     sim->output_count++;
     ep->on_command = s_command;
+    ep->on_write = s_write;
     ep->ctx = &sim->channels[index];
     return true;
 }

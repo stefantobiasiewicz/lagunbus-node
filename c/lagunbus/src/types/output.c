@@ -136,6 +136,15 @@ void lb_output_init(lb_output_t *out, lb_node_t *node, lb_endpoint_t *endpoint,
     out->lit_ms = node->platform->millis(node->platform->ctx);
 }
 
+uint8_t lb_output_write(lb_output_t *out, uint8_t element, lb_value_t value)
+{
+    if (element == LB_OUT_INVERT && out->drive != NULL) {
+        bool on = is_on(out);
+        out->drive(out->ctx, value.value != 0 ? !on : on);
+    }
+    return LB_RESULT_OK;
+}
+
 uint8_t lb_output_command(lb_output_t *out, uint8_t element)
 {
     switch (element) {

@@ -130,6 +130,23 @@ int main(void)
         set_attr(LB_OUT_INVERT, 0);
     }
 
+    LB_TEST("a write of Invert moves the coil at once, the receiver stays (BUG-07)");
+    {
+        set_attr(LB_OUT_INVERT, 0);
+        turn_on(true);
+        lb_output_command(&out, LB_OUT_CMD_ON);
+        LB_ASSERT(pin == true);
+        set_attr(LB_OUT_INVERT, 1);
+        LB_ASSERT(lb_output_write(&out, LB_OUT_INVERT, LB_NUM(1)) == LB_RESULT_OK);
+        LB_ASSERT(pin == false); /* on, through the closed contact */
+        LB_ASSERT(lb_endpoint_attr(&endpoints[0], LB_OUT_ON_OFF)->value.value == 1);
+        set_attr(LB_OUT_INVERT, 0);
+        LB_ASSERT(lb_output_write(&out, LB_OUT_INVERT, LB_NUM(0)) == LB_RESULT_OK);
+        LB_ASSERT(pin == true);
+        LB_ASSERT(lb_output_write(&out, LB_OUT_AUTO_OFF_TIME, LB_NUM(5)) == LB_RESULT_OK);
+        LB_ASSERT(pin == true); /* any other setting moves nothing */
+    }
+
     printf("\nPowerOnBehaviour\n");
 
     LB_TEST("OFF: off after a restart, however lit it was before");
