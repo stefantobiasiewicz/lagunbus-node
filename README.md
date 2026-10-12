@@ -359,7 +359,7 @@ and a retry of the first; a repeated `Reboot` that does not move the restart.
 wired to the normally-closed contact. The first is build — it never changes and the hub
 has no reason to know it — yet it was writable from the bus: one wrong write, or a
 `nodes.yaml` entry, and the relay ran backwards while every attribute looked right.
-The specification now splits them (`types/0x0020-output.md` §5.6, zadania/CR-04.md N7).
+The specification now splits them (`types/0x0020-output.md` §5.6, zadania/zrobione/CR-04.md N7).
 
 **`drive` gets the coil state.** The library still applies `Invert` when the endpoint has
 it — that is installation, an optional attribute. A board whose relay is LOW-active inverts

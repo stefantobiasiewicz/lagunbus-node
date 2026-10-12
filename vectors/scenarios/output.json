@@ -1,5 +1,5 @@
 {
-  "about": "The output profile of devices/apps/output: commands, reports with ReportMinGap = 200 that never lose the final state, no Invert — the board's LOW-active relay is build, so the application inverts the pin and the library drives the coil state (zadania/CR-04.md, N7) — AutoOffTime, and the result codes of writes (04-interakcje.md §8). The REPORT of a switch goes out BEFORE the RESPONSE, because the command handler runs before the reply is sent.",
+  "about": "The output profile of devices/apps/output: commands, reports with ReportMinGap = 200 that never lose the final state, no Invert — the board's LOW-active relay is build, so the application inverts the pin and the library drives the coil state (zadania/zrobione/CR-04.md, N7) — AutoOffTime, and the result codes of writes (04-interakcje.md §8). The REPORT of a switch goes out BEFORE the RESPONSE, because the command handler runs before the reply is sent.",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 0,

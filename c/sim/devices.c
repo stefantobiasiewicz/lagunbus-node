@@ -120,7 +120,8 @@ static void key3(lbs_t *sim, uint8_t channels)
 /** As `devices/apps/output`: a relay module that reports no more often than every
  * 200 ms — 1 … 8 of them; one, as the board, is the default. Its relay switches on a LOW
  * pin, but that is build: the application inverts the pin, the library drives the coil
- * state, and there is no `Invert` for the hub to overwrite (zadania/CR-04.md, N7). */
+ * state, and there is no `Invert` for the hub to overwrite
+ * (zadania/zrobione/CR-04.md, N7). */
 static void output(lbs_t *sim, uint8_t channels)
 {
     static const lb_attr_t attrs[] = {

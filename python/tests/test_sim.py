@@ -73,7 +73,7 @@ def test_the_store_comes_out_whole_and_says_when_it_changed() -> None:
 
 
 def test_output_on_is_the_state_and_driven_the_coil() -> None:
-    """`output` has no Invert (zadania/CR-04.md, N7): its LOW-active relay is the
+    """`output` has no Invert (zadania/zrobione/CR-04.md, N7): its LOW-active relay is the
     application's affair, so the library drives the coil state — the same as `OnOff`."""
     device = SimDevice("output", UID)
     device.store_put("address", b"\x42\x00")
