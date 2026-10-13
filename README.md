@@ -382,6 +382,63 @@ until 2026-10-13 it waited for the next command, and the receiver sat switched w
 whose output has `Invert` has to wire `lb_output_write` in; today none does (`output2`
 and `output8` of the simulator do). Pinned by `output_channels.json` and `test_output.c`.
 
+### Common attributes, reporting and persistence belong to the node (2026-10-13)
+
+Until zadania/zrobione/TASK-01.md a functional endpoint knew only `TypeId`, `TypeRevision`,
+`Features` and `Channel`; the system ones kept their reporting settings in the node and
+did nothing with them; `output.c` held back its own reports; and no persistent (`P`)
+attribute was ever stored — a `PowerOnBehaviour = RESTORE` written by the hub was gone at
+the very power cut it was for.
+
+**One struct for the common settings** (`lb_common_t`, the endpoint's `.common`), on
+system and functional endpoints alike, read and written by one code in `endpoint.c`; the
+system ones differ only in what they refuse (`Enabled = 0`, `QueryEnabled ≠ 0`). ep0–ep2
+are now `lb_endpoint_t`s inside the node (`node->system`). The field is `disabled`, not
+`enabled`, because every board's endpoint table is a designated initializer and an
+unnamed field is zero — zero has to be the default. A device gives its defaults there
+(`.common = {.report_min_gap = 200}`); a row `LB_COMMON_*` in the attribute array is dead,
+since common elements are answered before the array is searched.
+
+**The reporting engine is the node's, and it is pushed, not polled** (N2). A type sets a
+value with `lb_endpoint_set` and calls `lb_node_flush` once for everything it changed
+together; the node decides whether that is a change (`LB_HYST` and `ReportHysteresis`,
+"absent" coming or going always is), sends it now or holds it back by `ReportMinGap`, and
+runs the `ReportInterval` cycles in `lb_node_tick`. Rejected: the node scanning the arrays
+for changes — it would report every step of a fade, which `Output` forbids. Whether an
+attribute is reported is the TYPE's contract, so the type marks it (`LB_REPORTED`) in its
+init; a board cannot get it wrong.
+
+- **The gap is between rounds** (N3, `lagunbus-spec` `01-model-danych.md` §6): everything
+  owed at that moment goes out together. A held-back round carries the current values.
+- **A cycle counts from the last cycle**, in whole periods, from `Booted` or from the
+  write of `ReportInterval`; a change report does not reset it. A disabled endpoint's
+  cycle keeps its beat and sends nothing.
+- **Nothing before `Booted`, nothing owed across it** (N8): `Booted` starts the cycles
+  and drops what was owed; the hub reads the node then anyway. An attribute with no value
+  since start is not reported by a cycle, and the state an endpoint starts in is not a
+  change (Diagnostics settles its first reading silently).
+- **The state lives in the endpoint** (`reports[LB_REPORTED_MAX]`, 8 slots), not in
+  `lb_attr_t`: every board writes its rows as positional `{id, type, access, value}`, and a
+  fifth field fails them all under `-Wextra -Werror`.
+
+**`Enabled = 0`** (N4, `01-model-danych.md` §4.2): reads and writes work, a command gets
+`INVALID_STATE`, no events (and no sequence number used), no reports.
+
+**Persistence** (N5–N7): one key per attribute, `a<endpoint>.<element in hex>` — "a4.13",
+"a1.f8" — holding the value's bytes on the wire; stored after every successful write,
+before the reply (LB-NODE-027); loaded in `lb_node_start` before `Booted` through the
+type's checks (`lb_endpoint_restore`: no access check, no `on_write`), so a value new
+firmware no longer accepts is dropped and the default stays. Rejected: one blob per
+endpoint, which new firmware with one attribute more would read as garbage. The factory
+reset erases the **settings** — every writable persistent attribute — through the new
+`platform->erase`; read-only persistent values are counters (`PressCount`, stored every
+64 presses) and stay, as the output's remembered state does. `QueryEnabled` is stored and
+never acted on (N9): no type here has inputs.
+
+Pinned by `vectors/scenarios/reporting.json`, `persist.json`, `enabled.json` and
+`press_count.json`; `bus_state.json` and `bus_fault.json` now also expect the `BusState`
+reports.
+
 ## The registry
 
 ```sh
@@ -409,16 +466,14 @@ hardware.
 - a prioritised transmit queue: on overflow the oldest `REPORT` goes, never a
   `RESPONSE` or an `EVENT`.
 
-**Persistence and life cycle** (the address, the boot counter and the output state are
-already persistent):
+**Life cycle:** the firmware version in `Booted` — raising it should cause
+re-enumeration, a restart without a change should not.
 
-- persistent attributes. Settings are meant to survive a power cut, and today every one
-  returns to its default (zadania/TASK-01.md);
-- the firmware version in `Booted`: raising it should cause re-enumeration, a restart
-  without a change should not.
+**Reports from a port without `health`:** `Diagnostics` reports only what the controller
+tells, so on SocketCAN over a plain socket (`lagun-node`) and in the simulator without
+`bus` it reports nothing, and the hub's silence threshold falls back to polling.
 
-**Common attributes and reporting** on functional endpoints: `Enabled`, `QueryEnabled`,
-cyclic reports, `ReportHysteresis` (zadania/TASK-01.md). The scenario
-`vectors/scenarios/output.json` records today's `UNSUPPORTED_ELEMENT` for `Enabled`.
+**Queries:** `QueryEnabled` is stored, but no type in the library has inputs, so the node
+never sends a QUERY.
 
 **Groups:** the node declares `GroupCapacity = 0` and ignores broadcast frames.

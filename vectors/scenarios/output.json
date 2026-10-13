@@ -26,8 +26,8 @@
     {"at": 570, "note": "no endpoint 5", "rx": ["0C108500#05"], "expect": ["0E108500#0D"]},
     {"at": 580, "note": "common Features and Channel from the endpoint description",
      "rx": ["0C1084F2#06", "0C1084F5#07"], "expect": ["0E1084F2#060000", "0E1084F5#0701"]},
-    {"at": 590, "note": "Enabled on a functional endpoint is not there yet — zadania/TASK-01.md",
-     "rx": ["0C1084F3#07"], "expect": ["0E1084F3#17"]},
+    {"at": 590, "note": "Enabled, a common attribute of every endpoint (zadania/zrobione/TASK-01.md)",
+     "rx": ["0C1084F3#07"], "expect": ["0E1084F3#0701"]},
     {"at": 600, "note": "AutoOffTime = 2 s", "rx": ["0A108416#010200"], "expect": ["0E108416#01"]},
     {"at": 2399, "note": "switched on at 400"},
     {"at": 2400, "note": "off by itself, and reported", "expect": ["10108400#00"], "driven": 0}

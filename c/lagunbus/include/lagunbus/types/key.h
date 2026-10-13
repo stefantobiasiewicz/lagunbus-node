@@ -61,7 +61,7 @@ extern "C" {
  * One row per attribute the device EXPOSES. What it leaves out it sets itself through
  * `lb_key_config_t`; the hub learns that from the first `UNSUPPORTED_ELEMENT`. */
 #define LB_KEY_ATTR_PRESS_COUNT() \
-    {LB_KEY_PRESS_COUNT, LB_T_U32, LB_RO, LB_NUM(0)}
+    {LB_KEY_PRESS_COUNT, LB_T_U32, LB_RO | LB_PERSIST, LB_NUM(0)}
 #define LB_KEY_ATTR_EVENT_MODE() \
     {LB_KEY_EVENT_MODE, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_KEY_MODE_CLICK)}
 #define LB_KEY_ATTR_MULTI_CLICK_WINDOW(ms) \

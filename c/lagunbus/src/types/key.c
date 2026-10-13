@@ -141,11 +141,18 @@ static void flush_clicks(lb_key_t *key, lb_node_t *node)
     key->window_open = false;
 }
 
-static void count_press(lb_key_t *key)
+/** `PressCount` — loaded by the node at start, stored every `LB_PRESS_COUNT_EVERY`
+ * presses (types/0x0010-key-input.md §2.1). Until TASK-01 it lived in RAM only and
+ * started from zero at every restart, which made a lifetime counter a since-boot one. */
+static void count_press(lb_key_t *key, lb_node_t *node)
 {
     lb_attr_t *counter = lb_endpoint_attr(key->endpoint, LB_KEY_PRESS_COUNT);
-    if (counter != NULL && !counter->value.absent) {
-        counter->value.value++;
+    if (counter == NULL || counter->value.absent) {
+        return;
+    }
+    counter->value.value++;
+    if ((uint32_t)counter->value.value % LB_PRESS_COUNT_EVERY == 0u) {
+        lb_node_persist(node, key->endpoint, LB_KEY_PRESS_COUNT);
     }
 }
 
@@ -175,7 +182,7 @@ void lb_key_update(lb_key_t *key, lb_node_t *node, bool pressed, uint32_t now_ms
     if (pressed_now) {
         key->pressed_ms = now_ms;
         key->hold_active = false;
-        count_press(key);
+        count_press(key, node);
         if (mode == LB_KEY_MODE_RAW) {
             lb_key_emit_down(node, number);
         }

@@ -30,7 +30,8 @@
 #define LBS_ENDPOINTS 8   /**< functional endpoints per device: 4 … 11 */
 #define LBS_ATTRS     10  /**< attributes per endpoint */
 #define LBS_QUEUE     256 /**< frames each way between two calls from Python */
-#define LBS_SLOTS     32  /**< keys in the persistent store */
+#define LBS_SLOTS     128 /**< keys in the persistent store — every RW,P attribute has one
+                           *   since TASK-01: eight outputs x (5 common + 3-4 own) */
 #define LBS_VALUE     8   /**< bytes per stored value — the largest is a u32 */
 
 #define LBS_COUNT(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
@@ -127,8 +128,9 @@ extern const size_t lbs_device_total;
  * The attribute rows are copied; the type's hooks are set. Returns false when full. */
 bool lbs_add_key(lbs_t *sim, uint16_t features, const lb_attr_t *attrs, uint8_t count);
 
-/** Add an output endpoint, the same way; commands go to `lb_output_command`. */
-bool lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count);
+/** Add an output endpoint, the same way; commands go to `lb_output_command`. Returns
+ * the endpoint, for the device to set its common defaults (`.common`), or NULL. */
+lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count);
 
 /* --- the API for Python ------------------------------------------------------------- */
 
@@ -190,6 +192,11 @@ bool lbs_led(const lbs_t *sim);
  * call the port has none, like SocketCAN over a plain socket, and `Diagnostics` answers
  * `UNAVAILABLE` for the controller's counters. */
 void lbs_set_bus(lbs_t *sim, uint8_t state);
+
+/** The controller's error counters `health` answers from now on — `TxErrorCount` and
+ * `RxErrorCount` of `Diagnostics`. Gives the port a `health` as `lbs_set_bus` does, so
+ * that a scenario can watch their reports and hysteresis (zadania/zrobione/TASK-01.md). */
+void lbs_set_errors(lbs_t *sim, uint16_t tec, uint16_t rec);
 
 /** What the platform says the last restart was — read by the node at `lbs_start`.
  * `LB_RESET_POWER_ON` until set; `lagun-sim` sets `LB_RESET_SOFTWARE` when it boots a

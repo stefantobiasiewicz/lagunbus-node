@@ -1,0 +1,22 @@
+{
+  "about": "PressCount (types/0x0010-key-input.md): a lifetime counter, RO and persistent, stored every 64 presses rather than at each one; loaded at start. A factory reset does not touch it — it counts wear, not configuration (zadania/zrobione/TASK-01.md N6, N7).",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {"address": "4200", "a4.00": "3E000000"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 10, "pin": false},
+    {"at": 25, "note": "press 63: not stored", "store": {"a4.00": "3E000000"}},
+    {"at": 100, "pin": true},
+    {"at": 115, "expect": ["02108403#0001"]},
+    {"at": 200, "pin": false},
+    {"at": 215, "note": "press 64: stored", "store": {"a4.00": "40000000"}},
+    {"at": 300, "pin": true},
+    {"at": 315, "expect": ["02108403#0101"]},
+    {"at": 400, "rx": ["0C108400#01"], "expect": ["0E108400#0140000000"]},
+    {"at": 500, "note": "FactoryReset", "rx": ["06108002#024E47414C"], "expect": ["0E108002#02"]},
+    {"at": 550, "note": "the counter survives it", "store": {"a4.00": "40000000"}}
+  ]
+}

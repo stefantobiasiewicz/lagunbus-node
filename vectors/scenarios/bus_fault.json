@@ -1,5 +1,5 @@
 {
-  "about": "BUS_FAULT (zadania/zrobione/CR-05.md): the node asks the port's health at every tick; error passive and bus-off are a fault, warning is not. Every entry into bus-off counts in Diagnostics.BusOffCount, which until 2026-10-03 nothing ever raised. At every tick, not every 250 ms as first proposed: the ESP32 is out of bus-off in about 11 ms (128 x 11 bits at 125 kbit/s), and a slower look would miss bus-offs and undercount.",
+  "about": "BUS_FAULT (zadania/zrobione/CR-05.md): the node asks the port's health at every tick; error passive and bus-off are a fault, warning is not. Every entry into bus-off counts in Diagnostics.BusOffCount, which until 2026-10-03 nothing ever raised. At every tick, not every 250 ms as first proposed: the ESP32 is out of bus-off in about 11 ms (128 x 11 bits at 125 kbit/s), and a slower look would miss bus-offs and undercount. Since zadania/zrobione/TASK-01.md BusState is reported at every change, as the type says: an enum, so no hysteresis. In bus-off the controller sends nothing — on a board that report never leaves; the simulated port lets it through, and the next state carries the truth anyway.",
   "profile": "output",
   "uid": "A1B2C3D400010203",
   "jitter": 0,
@@ -9,13 +9,13 @@
   "on_start": ["02108001#000000010000"],
   "on_start_state": "READY",
   "steps": [
-    {"at": 100, "bus": "passive", "state": "BUS_FAULT"},
-    {"at": 200, "bus": "off", "state": "BUS_FAULT"},
+    {"at": 100, "bus": "passive", "state": "BUS_FAULT", "expect": ["10108102#01"]},
+    {"at": 200, "bus": "off", "state": "BUS_FAULT", "expect": ["10108102#02"]},
     {"at": 210, "note": "one entry, however long it lasts", "state": "BUS_FAULT"},
     {"at": 220, "rx": ["0C108103#01"], "expect": ["0E108103#010100"]},
-    {"at": 300, "bus": "warning", "note": "warning is not a fault", "state": "READY"},
-    {"at": 400, "bus": "off", "state": "BUS_FAULT"},
-    {"at": 500, "bus": "active", "state": "READY"},
+    {"at": 300, "bus": "warning", "note": "warning is not a fault — and BusState says ACTIVE", "state": "READY", "expect": ["10108102#00"]},
+    {"at": 400, "bus": "off", "state": "BUS_FAULT", "expect": ["10108102#02"]},
+    {"at": 500, "bus": "active", "state": "READY", "expect": ["10108102#00"]},
     {"at": 510, "rx": ["0C108103#02"], "expect": ["0E108103#020200"]}
   ]
 }

@@ -34,7 +34,7 @@ typedef struct {
         uint8_t data[8];
         uint8_t length;
         bool    taken;
-    } memory[6];
+    } memory[16]; /* since TASK-01 every persistent setting has a key of its own */
 } mock_t;
 
 LB_MOCK static bool mock_send(void *ctx, const lb_frame_t *f)
@@ -85,6 +85,16 @@ LB_MOCK static bool mock_store(void *ctx, const char *key_name, const void *data
     a->memory[free_slots].length = (uint8_t)len;
     a->memory[free_slots].taken = true;
     return true;
+}
+
+LB_MOCK static void mock_erase(void *ctx, const char *key_name)
+{
+    mock_t *a = (mock_t *)ctx;
+    for (size_t i = 0; i < sizeof a->memory / sizeof a->memory[0]; i++) {
+        if (a->memory[i].taken && strcmp(a->memory[i].key_name, key_name) == 0) {
+            memset(&a->memory[i], 0, sizeof a->memory[i]);
+        }
+    }
 }
 
 LB_MOCK static bool mock_load(void *ctx, const char *key_name, void *out, size_t len)

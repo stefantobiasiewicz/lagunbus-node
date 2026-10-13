@@ -516,7 +516,7 @@ int main(void)
         lb_node_tick(&node);
         last_result(&m, &result, &tid, &data, &len);
         LB_ASSERT(result == LB_RESULT_OK
-                  && node.system_reporting[LB_EP_DIAGNOSTICS].report_interval == 60);
+                  && node.system[LB_EP_DIAGNOSTICS].common.report_interval == 60);
     }
 
     LB_TEST("a common attribute of the absent ep3 is still UNSUPPORTED_ENDPOINT");

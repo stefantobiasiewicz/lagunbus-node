@@ -94,6 +94,16 @@ static bool s_store(void *ctx, const char *key, const void *data, size_t len)
     return true;
 }
 
+static void s_erase(void *ctx, const char *key)
+{
+    lbs_t *sim = ctx;
+    lbs_slot_t *slot = s_slot(sim, key, false);
+    if (slot != NULL) {
+        memset(slot, 0, sizeof *slot);
+        sim->store_version++;
+    }
+}
+
 static bool s_load(void *ctx, const char *key, void *out, size_t len)
 {
     lbs_slot_t *slot = s_slot(ctx, key, false);
@@ -161,18 +171,18 @@ bool lbs_add_key(lbs_t *sim, uint16_t features, const lb_attr_t *attrs, uint8_t 
     return true;
 }
 
-bool lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
+lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
 {
     uint8_t index = sim->output_count;
     lb_endpoint_t *ep = s_next(sim, LB_TYPE_OUTPUT, attrs, count, LBS_OUTPUT, index);
     if (ep == NULL) {
-        return false;
+        return NULL;
     }
     sim->output_count++;
     ep->on_command = s_command;
     ep->on_write = s_write;
     ep->ctx = &sim->channels[index];
-    return true;
+    return ep;
 }
 
 static bool s_pressed(const lbs_t *sim, uint32_t pins, uint8_t input)
@@ -226,7 +236,8 @@ lbs_t *lbs_create(const char *name, const uint8_t *uid, uint32_t jitter, uint8_t
     }
     sim->bus = (lb_transport_t){.send = s_send, .recv = s_recv, .ctx = sim};
     sim->platform = (lb_platform_t){
-        .millis = s_millis, .store = s_store, .load = s_load, .random = s_random,
+        .millis = s_millis, .store = s_store, .load = s_load, .erase = s_erase,
+        .random = s_random,
         .reset_reason = s_reset_reason, .ctx = sim,
     };
     sim->state = -1;
@@ -408,6 +419,14 @@ void lbs_set_bus(lbs_t *sim, uint8_t state)
     sim->bus.health = s_health;
     sim->has_health = true;
     sim->bus_state = state;
+}
+
+void lbs_set_errors(lbs_t *sim, uint16_t tec, uint16_t rec)
+{
+    sim->bus.health = s_health;
+    sim->has_health = true;
+    sim->tec = tec;
+    sim->rec = rec;
 }
 
 void lbs_set_reset_reason(lbs_t *sim, uint8_t reason) { sim->reset_reason = reason; }

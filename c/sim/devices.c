@@ -117,6 +117,15 @@ static void key3(lbs_t *sim, uint8_t channels)
 
 /* --- outputs ------------------------------------------------------------------------ */
 
+/** Reports no more often than every 200 ms: a held-down key toggling an output must not
+ * flood the bus. A common setting, so it is the endpoint's `.common`, not a row. */
+static void min_gap_200(lb_endpoint_t *ep)
+{
+    if (ep != NULL) {
+        ep->common.report_min_gap = 200;
+    }
+}
+
 /** As `devices/apps/output`: a relay module that reports no more often than every
  * 200 ms — 1 … 8 of them; one, as the board, is the default. Its relay switches on a LOW
  * pin, but that is build: the application inverts the pin, the library drives the coil
@@ -129,11 +138,10 @@ static void output(lbs_t *sim, uint8_t channels)
         {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
         {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
         {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
-        {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
     };
     output_board(sim);
     for (uint8_t i = 0; i < channels; i++) {
-        lbs_add_output(sim, attrs, LBS_COUNT(attrs));
+        min_gap_200(lbs_add_output(sim, attrs, LBS_COUNT(attrs)));
     }
 }
 
@@ -178,12 +186,11 @@ static void out8(lbs_t *sim, uint8_t channels)
         {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
         {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
         {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
-        {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(200)},
     };
     output_board(sim);
     sim->device_type = 0x0021;
     for (int i = 0; i < 8; i++) {
-        lbs_add_output(sim, attrs, LBS_COUNT(attrs));
+        min_gap_200(lbs_add_output(sim, attrs, LBS_COUNT(attrs)));
     }
 }
 

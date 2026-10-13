@@ -11,8 +11,10 @@ Frames are written as `candump` does — `IDENTIFIER#DATA`, both in hex.
 The service button and the status LED (zadania/zrobione/CR-05.md): `reset_reason` at the top is
 what the platform says the last restart was, `bus` (at the top or in a step) is what the
 port's `health` answers from then on — `active`, `warning`, `passive`, `off`. In a step,
-`service: true` presses the service button before the turn, and `state` is the state the
-node last REPORTED to its state watch — `on_start_state` the same after the start.
+`errors: [tec, rec]` (at the top or in a step) are the controller's error counters
+`health` answers from then on, `service: true` presses the service button before the
+turn, and `state` is the state the node last REPORTED to its state watch —
+`on_start_state` the same after the start.
 """
 
 from __future__ import annotations
@@ -87,6 +89,8 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
         node.set_reset_reason(s["reset_reason"])
     if "bus" in s:
         node.set_bus(s["bus"])
+    if "errors" in s:
+        node.set_errors(*s["errors"])
 
     pins = pin_mask(s.get("pin", False))
     node.set_clock(s.get("start_at", 0))
@@ -104,6 +108,8 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             pins = pin_mask(step["pin"])
         if "bus" in step:
             node.set_bus(step["bus"])
+        if "errors" in step:
+            node.set_errors(*step["errors"])
         if step.get("service", False):
             node.service_press()
         node.loop(pins)

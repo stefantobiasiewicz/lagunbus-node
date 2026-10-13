@@ -30,6 +30,15 @@ typedef struct lb_platform {
      * on first boot, not a fault. */
     bool (*load)(void *ctx, const char *key, void *out, size_t len);
 
+    /** Forget a key — a later `load` says "not there". Optional; erasing a key that was
+     * never stored is not a fault.
+     *
+     * Needed by the factory reset since the node stores its settings
+     * (zadania/zrobione/TASK-01.md N6): a restart returns RAM to its defaults, but the
+     * settings in the store would load right back. `NULL` makes the reset leave them stored — a port
+     * with `store` should have it. */
+    void (*erase)(void *ctx, const char *key);
+
     /** Random number.
      *
      * This is here for a specific reason, not for completeness: **the delay before

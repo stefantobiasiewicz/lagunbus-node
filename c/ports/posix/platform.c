@@ -61,6 +61,17 @@ static bool posix_load(void *ctx, const char *key, void *out, size_t len)
     return read_ok == len;
 }
 
+static void posix_erase(void *ctx, const char *key)
+{
+    lb_posix_state_t *state = (lb_posix_state_t *)ctx;
+    if (!state->persistent) {
+        return;
+    }
+    char file_handle[320];
+    key_path(state, key, file_handle, sizeof file_handle);
+    remove(file_handle); /* no file is fine: the key was never stored */
+}
+
 static uint32_t posix_random(void *ctx)
 {
     (void)ctx;
@@ -93,6 +104,7 @@ bool lb_posix_platform(lb_platform_t *out, const char *catalog)
     out->millis = posix_millis;
     out->store = posix_store;
     out->load = posix_load;
+    out->erase = posix_erase;
     out->random = posix_random;
     out->ctx = state;
     return true;

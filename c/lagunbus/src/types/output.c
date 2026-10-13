@@ -43,28 +43,6 @@ static bool is_on(const lb_output_t *out)
     return setting(out->endpoint, LB_OUT_ON_OFF, 0) != 0;
 }
 
-/** A report with a rate limit (`ReportMinGap`, common attribute 0xF9).
- *
- * An output switched rapidly — by a held-down key, say — would flood the bus with
- * reports. `MinGap` does not lose the final state: a held-back report goes out once
- * the gap has passed, and it then carries the CURRENT state, not the one from a
- * moment ago.
- */
-static void report_attr(lb_output_t *out, uint32_t now_ms)
-{
-    uint32_t min_gap = (uint32_t)setting(out->endpoint, LB_COMMON_REPORTMINGAP, 0);
-    if (min_gap > 0 && out->last_report_ms != 0
-        && now_ms - out->last_report_ms < min_gap) {
-        out->report_pending = true;
-        return;
-    }
-    uint8_t v[1];
-    lb_encode(LB_T_BOOL, LB_NUM(is_on(out) ? 1 : 0), v, 1);
-    lb_node_report(out->node, out->endpoint->number, LB_OUT_ON_OFF, v, 1);
-    out->last_report_ms = now_ms == 0 ? 1 : now_ms;
-    out->report_pending = false;
-}
-
 /** Store the state, but only when `PowerOnBehaviour` is `RESTORE`.
  *
  * Without that condition every switch would grind the persistent store — and a relay
@@ -91,7 +69,7 @@ void lb_output_set(lb_output_t *out, bool fresh)
     if (on_off == NULL || (on_off->value.value != 0) == fresh) {
         return; /* nothing changed: nothing to report and nothing to grind */
     }
-    on_off->value = LB_NUM(fresh ? 1 : 0);
+    lb_endpoint_set(out->endpoint, LB_OUT_ON_OFF, LB_NUM(fresh ? 1 : 0));
 
     bool invert = setting(out->endpoint, LB_OUT_INVERT, 0) != 0;
     if (out->drive != NULL) {
@@ -99,7 +77,11 @@ void lb_output_set(lb_output_t *out, bool fresh)
     }
     out->lit_ms = out->node->platform->millis(out->node->platform->ctx);
     remember(out);
-    report_attr(out, out->lit_ms);
+    /* The report is the node's (zadania/zrobione/TASK-01.md N2): at once, or — within
+     * `ReportMinGap` of the last one — held back and sent with the CURRENT state when
+     * the gap has passed. A held-down key toggling the output does not flood the bus,
+     * and the final state is never lost. */
+    lb_node_flush(out->node, out->endpoint);
 }
 
 void lb_output_init(lb_output_t *out, lb_node_t *node, lb_endpoint_t *endpoint,
@@ -127,6 +109,11 @@ void lb_output_init(lb_output_t *out, lb_node_t *node, lb_endpoint_t *endpoint,
      * state and has to be brought to whatever the node claims about itself. */
     lb_attr_t *on_off = lb_endpoint_attr(endpoint, LB_OUT_ON_OFF);
     if (on_off != NULL) {
+        /* Reported, every change, no hysteresis — the type's contract
+         * (types/0x0020-output.md §5.3), so the type marks it, not the device. Set
+         * directly, not through `lb_endpoint_set`: the state an output starts in is not
+         * a change, and nothing is reported before `Booted` (§5.7). */
+        on_off->access |= LB_REPORTED;
         on_off->value = LB_NUM(target ? 1 : 0);
     }
     bool invert = setting(endpoint, LB_OUT_INVERT, 0) != 0;
@@ -170,8 +157,5 @@ void lb_output_tick(lb_output_t *out, uint32_t now_ms)
     uint32_t auto_off = (uint32_t)setting(out->endpoint, LB_OUT_AUTO_OFF_TIME, 0);
     if (auto_off > 0 && is_on(out) && now_ms - out->lit_ms >= auto_off * 1000u) {
         lb_output_set(out, false);
-    }
-    if (out->report_pending) {
-        report_attr(out, now_ms);
     }
 }

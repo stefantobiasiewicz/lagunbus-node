@@ -45,8 +45,6 @@ typedef struct {
     void              *ctx;
 
     uint32_t lit_ms;   /**< when it was switched on — for AutoOffTime */
-    uint32_t last_report_ms;
-    bool     report_pending;
 } lb_output_t;
 
 /** Prepare the output and apply `PowerOnBehaviour`.
@@ -72,7 +70,8 @@ void lb_output_set(lb_output_t *out, bool state);
  * Every other setting is read when it is used, so the rest is just `LB_RESULT_OK`. */
 uint8_t lb_output_write(lb_output_t *out, uint8_t element, lb_value_t value);
 
-/** Counts down `AutoOffTime` and releases held-back reports. Call it in the loop. */
+/** Counts down `AutoOffTime`. Call it in the loop. Held-back reports are the node's
+ * (`lb_node_tick`). */
 void lb_output_tick(lb_output_t *out, uint32_t now_ms);
 
 #ifdef __cplusplus

@@ -15,6 +15,7 @@ static void announce_booted(lb_node_t *node);
 static void system_defaults(lb_node_t *node);
 static void read_health(lb_node_t *node);
 static void report_state(lb_node_t *node);
+static void begin_reporting(lb_node_t *node);
 
 void lb_node_init(lb_node_t *node, lb_transport_t *bus, lb_platform_t *platform,
                   const lb_identity_t *identity, lb_endpoint_t *endpoints, uint8_t count)
@@ -25,7 +26,30 @@ void lb_node_init(lb_node_t *node, lb_transport_t *bus, lb_platform_t *platform,
     node->identity = *identity;
     node->endpoints = endpoints;
     node->endpoint_count = count;
+    /* A new node knows nothing it has reported. The arrays are the device's and outlive
+     * a node set up again on them — the tests do exactly that, a host could too. */
+    for (uint8_t i = 0; i < count; i++) {
+        memset(endpoints[i].reports, 0, sizeof endpoints[i].reports);
+        endpoints[i].rounded = false;
+    }
     node->reset_reason = LB_RESET_POWER_ON;
+
+    static const uint16_t type_ids[] = {LB_TYPE_DEVICE, LB_TYPE_DIAGNOSTICS, LB_TYPE_GROUPS};
+    for (uint8_t i = 0; i <= LB_EP_GROUPS; i++) {
+        node->system[i] = (lb_endpoint_t){.number = i, .type_id = type_ids[i], .revision = 1};
+    }
+    /* Reported, by types/0x0002-diagnostics.md §2.1; the counters with hysteresis, the
+     * state without — it is an enum. Absent until the port first tells: a port that
+     * cannot (SocketCAN over a plain socket) never reports them, just as it answers
+     * their reads with UNAVAILABLE. */
+    node->diagnostics[0] = (lb_attr_t){LB_DIAG_TX_ERROR_COUNT, LB_T_U16,
+                                       LB_RO | LB_REPORTED | LB_HYST, LB_ABSENT};
+    node->diagnostics[1] = (lb_attr_t){LB_DIAG_RX_ERROR_COUNT, LB_T_U16,
+                                       LB_RO | LB_REPORTED | LB_HYST, LB_ABSENT};
+    node->diagnostics[2] = (lb_attr_t){LB_DIAG_BUS_STATE, LB_T_ENUM8,
+                                       LB_RO | LB_REPORTED, LB_ABSENT};
+    node->system[LB_EP_DIAGNOSTICS].attrs = node->diagnostics;
+    node->system[LB_EP_DIAGNOSTICS].attr_count = 3;
     system_defaults(node);
 }
 
@@ -33,12 +57,288 @@ void lb_node_init(lb_node_t *node, lb_transport_t *bus, lb_platform_t *platform,
  * reset. */
 static void system_defaults(lb_node_t *node)
 {
-    memset(node->system_reporting, 0, sizeof node->system_reporting);
+    for (uint8_t i = 0; i <= LB_EP_GROUPS; i++) {
+        memset(&node->system[i].common, 0, sizeof node->system[i].common);
+    }
     node->error_threshold = 96; /* default from the Diagnostics type definition */
     /* Defaults from types/0x0002-diagnostics.md §5.4: counters jitter at every frame,
      * so a report every change would load the bus the diagnostics is meant to watch. */
-    node->system_reporting[LB_EP_DIAGNOSTICS].report_interval = 300;
-    node->system_reporting[LB_EP_DIAGNOSTICS].report_hysteresis = 16;
+    node->system[LB_EP_DIAGNOSTICS].common.report_interval = 300;
+    node->system[LB_EP_DIAGNOSTICS].common.report_hysteresis = 16;
+}
+
+/* --- the persistent store ---------------------------------------------------------- */
+
+/** The key of a persistent attribute: "a", the endpoint number, ".", the element in two
+ * hex digits — "a4.13" for `PowerOnBehaviour` of ep4, "a1.f8" for `ReportInterval` of
+ * `Diagnostics`. At most "a255.ff", seven characters, well inside the 15 NVS allows.
+ *
+ * One key per attribute and not one blob per endpoint (zadania/zrobione/TASK-01.md N5): a blob
+ * would have to be laid out, and firmware that adds or drops an attribute would read the
+ * old layout as garbage. A key per attribute that new firmware does not know is simply
+ * never loaded. The cost is NVS entries — some eighty on an eight-output board, a small
+ * part of the partition. The value is the attribute's bytes on the wire, so a stored
+ * value is checked exactly as a write from the bus is when it is loaded. */
+#define ATTR_KEY_LEN sizeof "a255.ff"
+
+static void attr_key(uint8_t endpoint, uint8_t element, char out[ATTR_KEY_LEN])
+{
+    static const char hex[] = "0123456789abcdef";
+    size_t i = 0;
+    out[i++] = 'a';
+    if (endpoint >= 100u) {
+        out[i++] = (char)('0' + endpoint / 100u);
+    }
+    if (endpoint >= 10u) {
+        out[i++] = (char)('0' + endpoint / 10u % 10u);
+    }
+    out[i++] = (char)('0' + endpoint % 10u);
+    out[i++] = '.';
+    out[i++] = hex[element >> 4];
+    out[i++] = hex[element & 0x0Fu];
+    out[i] = '\0';
+}
+
+/** The common settings — all `RW,P` (01-model-danych.md §4) — with their wire types. */
+static const struct {
+    uint8_t   element;
+    lb_type_t type;
+} common_settings[] = {
+    {LB_COMMON_ENABLED,          LB_T_BOOL},
+    {LB_COMMON_QUERYENABLED,     LB_T_MAP16},
+    {LB_COMMON_REPORTINTERVAL,   LB_T_U16},
+    {LB_COMMON_REPORTMINGAP,     LB_T_U16},
+    {LB_COMMON_REPORTHYSTERESIS, LB_T_U16},
+};
+#define COMMON_SETTINGS (sizeof common_settings / sizeof common_settings[0])
+
+static uint8_t total_endpoints(const lb_node_t *node)
+{
+    return (uint8_t)(LB_EP_GROUPS + 1u + node->endpoint_count);
+}
+
+/** System ones first, then the functional — every endpoint the node answers for. */
+static lb_endpoint_t *endpoint_at(lb_node_t *node, uint8_t i)
+{
+    return i <= LB_EP_GROUPS ? &node->system[i]
+                             : &node->endpoints[i - (LB_EP_GROUPS + 1u)];
+}
+
+bool lb_node_persist(lb_node_t *node, lb_endpoint_t *endpoint, uint8_t element)
+{
+    lb_platform_t *pl = node->platform;
+    if (pl->store == NULL) {
+        return false;
+    }
+    uint8_t bytes[LB_MAX_PAYLOAD];
+    uint8_t len = 0;
+    if (lb_endpoint_common_setting(element)) {
+        if (lb_endpoint_read(endpoint, element, bytes, sizeof bytes, &len) != LB_RESULT_OK) {
+            return false;
+        }
+    } else if (endpoint == &node->system[LB_EP_DIAGNOSTICS]
+               && element == LB_DIAG_ERROR_THRESHOLD) {
+        len = lb_encode(LB_T_U16, LB_NUM(node->error_threshold), bytes, sizeof bytes);
+    } else {
+        const lb_attr_t *attr = lb_endpoint_attr(endpoint, element);
+        if (attr == NULL || !(attr->access & LB_PERSIST)) {
+            return false;
+        }
+        len = lb_encode(attr->type, attr->value, bytes, sizeof bytes);
+    }
+    char key[ATTR_KEY_LEN];
+    attr_key(endpoint->number, element, key);
+    return len > 0 && pl->store(pl->ctx, key, bytes, len);
+}
+
+/** Load one stored value and put it back through the type's checks. Nothing stored, or
+ * a value that no longer passes, leaves the default. */
+static void restore_one(lb_node_t *node, lb_endpoint_t *endpoint, uint8_t element,
+                        lb_type_t type)
+{
+    uint8_t bytes[LB_MAX_PAYLOAD];
+    uint8_t len = lb_size_of(type);
+    char key[ATTR_KEY_LEN];
+    attr_key(endpoint->number, element, key);
+    if (len == 0 || len > sizeof bytes
+        || !node->platform->load(node->platform->ctx, key, bytes, len)) {
+        return;
+    }
+    if (endpoint == &node->system[LB_EP_DIAGNOSTICS] && element == LB_DIAG_ERROR_THRESHOLD) {
+        lb_value_t v;
+        if (lb_decode(LB_T_U16, bytes, len, &v) && !v.absent && v.value >= 16
+            && v.value <= 255) {
+            node->error_threshold = (uint16_t)v.value;
+        }
+        return;
+    }
+    lb_endpoint_restore(endpoint, element, bytes, len);
+}
+
+/** Every stored setting back, before `Booted` — the start-up order of
+ * types/0x0001-device.md §5.1 puts configuration first, and the types read their
+ * settings in their init, after `lb_node_start`. Until TASK-01 nothing came back: a
+ * `PowerOnBehaviour = RESTORE` the hub had written was gone at exactly the power cut it
+ * was meant for. */
+static void restore_settings(lb_node_t *node)
+{
+    if (node->platform->load == NULL) {
+        return;
+    }
+    for (uint8_t i = 0; i < total_endpoints(node); i++) {
+        lb_endpoint_t *ep = endpoint_at(node, i);
+        for (size_t c = 0; c < COMMON_SETTINGS; c++) {
+            restore_one(node, ep, common_settings[c].element, common_settings[c].type);
+        }
+        for (uint8_t a = 0; a < ep->attr_count; a++) {
+            if (ep->attrs[a].access & LB_PERSIST) {
+                restore_one(node, ep, ep->attrs[a].id, ep->attrs[a].type);
+            }
+        }
+    }
+    restore_one(node, &node->system[LB_EP_DIAGNOSTICS], LB_DIAG_ERROR_THRESHOLD, LB_T_U16);
+}
+
+/** Forget every stored SETTING — what a factory reset means (types/0x0001-device.md
+ * §3.3). Settings are what can be written: a persistent read-only value is a counter
+ * (`PressCount`, wear over the device's life) and stays, as `BootCount` does. So does
+ * an output's remembered state — it is state, not configuration. */
+static void erase_settings(lb_node_t *node)
+{
+    lb_platform_t *pl = node->platform;
+    if (pl->erase == NULL) {
+        return;
+    }
+    char key[ATTR_KEY_LEN];
+    for (uint8_t i = 0; i < total_endpoints(node); i++) {
+        lb_endpoint_t *ep = endpoint_at(node, i);
+        for (size_t c = 0; c < COMMON_SETTINGS; c++) {
+            attr_key(ep->number, common_settings[c].element, key);
+            pl->erase(pl->ctx, key);
+        }
+        for (uint8_t a = 0; a < ep->attr_count; a++) {
+            if ((ep->attrs[a].access & LB_PERSIST) && (ep->attrs[a].access & LB_WO)) {
+                attr_key(ep->number, ep->attrs[a].id, key);
+                pl->erase(pl->ctx, key);
+            }
+        }
+    }
+    attr_key(LB_EP_DIAGNOSTICS, LB_DIAG_ERROR_THRESHOLD, key);
+    pl->erase(pl->ctx, key);
+}
+
+/* --- reporting (01-model-danych.md §6) ----------------------------------------------
+ *
+ * The engine is the node's, not the types' (zadania/zrobione/TASK-01.md N2). A type only says
+ * what the value is now (`lb_endpoint_set`) and when it is done changing things
+ * (`lb_node_flush`); whether that is a change worth a report, and when it may go out,
+ * is decided here, once for every type. Until TASK-01 `output.c` held back its own
+ * reports and nothing else reported at all.
+ *
+ * The node never scans the arrays for changes: a scan would see every step of a fade
+ * and report it, while the type has to say "not during the transition"
+ * (types/0x0020-output.md §5.3). A type that does not set, does not report. */
+
+static void clear_due(lb_endpoint_t *endpoint)
+{
+    for (unsigned i = 0; i < LB_REPORTED_MAX; i++) {
+        endpoint->reports[i].due = false;
+    }
+}
+
+/** At `Booted` — at start, after an assignment, after a `Reboot` without a restart:
+ * the cycles start now, the gap starts afresh, and nothing owed from before goes out.
+ * The hub reads the node after `Booted` anyway, and an output reports nothing before it
+ * (types/0x0020-output.md §5.7). */
+static void begin_reporting(lb_node_t *node)
+{
+    uint32_t now = node->platform->millis(node->platform->ctx);
+    for (uint8_t i = 0; i < total_endpoints(node); i++) {
+        lb_endpoint_t *ep = endpoint_at(node, i);
+        ep->rounded = false;
+        ep->cycle_ms = now;
+        clear_due(ep);
+    }
+}
+
+void lb_node_flush(lb_node_t *node, lb_endpoint_t *endpoint)
+{
+    if (!node->booted || node->address == LB_ADDRESS_UNASSIGNED) {
+        return;
+    }
+    if (endpoint->common.disabled) {
+        clear_due(endpoint); /* "does not report" (01-model-danych.md §4) */
+        return;
+    }
+    bool owed = false;
+    for (unsigned i = 0; i < LB_REPORTED_MAX; i++) {
+        owed = owed || endpoint->reports[i].due;
+    }
+    if (!owed) {
+        return;
+    }
+    /* The gap is between ROUNDS, not frames (zadania/zrobione/TASK-01.md N3): `Transitioning = 0`
+     * goes out with the level it reached, and a cycle with every reported attribute at
+     * once — reading the gap per frame would pull them `ReportMinGap` apart. Held back,
+     * the round waits for the tick and then carries the CURRENT values. */
+    uint32_t now = node->platform->millis(node->platform->ctx);
+    if (endpoint->rounded && now - endpoint->round_ms < endpoint->common.report_min_gap) {
+        return;
+    }
+    /* In the order of the attribute array — the device's order, the same every time. */
+    for (uint8_t a = 0; a < endpoint->attr_count; a++) {
+        lb_attr_t *attr = &endpoint->attrs[a];
+        lb_report_t *slot = lb_endpoint_report(endpoint, attr->id, false);
+        if (slot == NULL || !slot->due) {
+            continue;
+        }
+        uint8_t bytes[LB_MAX_PAYLOAD];
+        uint8_t len = lb_encode(attr->type, attr->value, bytes, sizeof bytes);
+        if (len > 0) {
+            lb_node_report(node, endpoint->number, attr->id, bytes, len);
+        }
+        slot->reported = attr->value;
+        slot->baseline = true;
+        slot->due = false;
+    }
+    endpoint->round_ms = now;
+    endpoint->rounded = true;
+}
+
+/** The cycles, then whatever is owed. Both triggers at once, neither replacing the
+ * other (01-model-danych.md §6.1).
+ *
+ * A cycle counts from the last one, not from the last report: `ReportInterval` is the
+ * floor of freshness, and a change report in between does not reset the hub's view of
+ * the rest. It steps by whole periods so it does not drift with the loop; a node that
+ * fell a whole period behind starts again from now rather than firing a burst. A
+ * disabled endpoint's cycle keeps counting and sends nothing — switched back on, it
+ * resumes on its old beat instead of reporting at once. An attribute with no value since
+ * start is not reported by the cycle either: "absent" would tell the hub nothing it
+ * would not learn from the first real value (zadania/zrobione/TASK-01.md N8). */
+static void reporting_tick(lb_node_t *node, uint32_t now)
+{
+    for (uint8_t i = 0; i < total_endpoints(node); i++) {
+        lb_endpoint_t *ep = endpoint_at(node, i);
+        uint32_t period = (uint32_t)ep->common.report_interval * 1000u;
+        if (period > 0 && now - ep->cycle_ms >= period) {
+            ep->cycle_ms += period;
+            if (now - ep->cycle_ms >= period) {
+                ep->cycle_ms = now;
+            }
+            for (uint8_t a = 0; a < ep->attr_count && !ep->common.disabled; a++) {
+                lb_attr_t *attr = &ep->attrs[a];
+                if (!(attr->access & LB_REPORTED)) {
+                    continue;
+                }
+                lb_report_t *slot = lb_endpoint_report(ep, attr->id, true);
+                if (slot != NULL && (slot->baseline || !attr->value.absent)) {
+                    slot->due = true;
+                }
+            }
+        }
+        lb_node_flush(node, ep);
+    }
 }
 
 uint32_t lb_node_short_id(const lb_node_t *node)
@@ -150,12 +450,16 @@ bool lb_node_emit(lb_node_t *node, uint8_t endpoint, uint8_t event,
     if (!node->booted || len + 1u > LB_MAX_PAYLOAD) {
         return false;
     }
-    uint8_t *seq = endpoint == 0
-                 ? &node->device_event_seq
-                 : (lb_node_endpoint(node, endpoint) != NULL
-                        ? &lb_node_endpoint(node, endpoint)->event_seq
-                        : NULL);
+    lb_endpoint_t *ep = endpoint == 0 ? NULL : lb_node_endpoint(node, endpoint);
+    uint8_t *seq = endpoint == 0 ? &node->device_event_seq
+                 : ep != NULL    ? &ep->event_seq
+                                 : NULL;
     if (seq == NULL) {
+        return false;
+    }
+    if (ep != NULL && ep->common.disabled) {
+        /* "Does not react" (01-model-danych.md §4). Before the sequence number: nothing
+         * went out, so there is no gap for the hub to read as a lost event. */
         return false;
     }
 
@@ -178,6 +482,7 @@ static void announce_booted(lb_node_t *node)
     params[0] = node->reset_reason;
     lb_encode(LB_T_U32, LB_NUM((int32_t)node->identity.firmware), params + 1, 4);
     lb_node_emit(node, 0, LB_DEV_EVENT_BOOTED, params, sizeof params);
+    begin_reporting(node);
 }
 
 void lb_node_start(lb_node_t *node)
@@ -206,6 +511,7 @@ void lb_node_start(lb_node_t *node)
         node->platform->store(node->platform->ctx, "boot", &node->boot_count,
                               sizeof node->boot_count);
     }
+    restore_settings(node);
 
     /* 2. Only now may we answer anything. */
     node->booted = true;
@@ -226,6 +532,18 @@ void lb_node_start(lb_node_t *node)
      *    flashing NO_ADDRESS for one tick. */
     read_health(node);
     report_state(node);
+
+    /* 5. What the controller says at start is where Diagnostics stands, not a change:
+     *    no report for it, and hysteresis counts from here (zadania/zrobione/TASK-01.md N8). */
+    for (uint8_t a = 0; a < 3; a++) {
+        const lb_attr_t *attr = &node->diagnostics[a];
+        lb_report_t *slot = lb_endpoint_report(&node->system[LB_EP_DIAGNOSTICS], attr->id, true);
+        if (slot != NULL) {
+            slot->reported = attr->value;
+            slot->baseline = !attr->value.absent;
+            slot->due = false;
+        }
+    }
 }
 
 /** How long a node waits for an ASSIGNMENT before it may try again (03-adresacja.md
@@ -446,101 +764,6 @@ static uint8_t groups_read(lb_node_t *node, uint8_t element,
     return *len ? LB_RESULT_OK : LB_RESULT_FAILURE;
 }
 
-/** Common attributes of the system endpoints — the same set as in `lb_endpoint_read`
- * (01-model-danych.md §4.1), except there is no endpoint description to take them
- * from, because the system ones are not in the array.
- *
- * `Channel` is always 0 and `Enabled` always 1: a system endpoint is not a function of
- * any channel, and a disabled `Device` or `Diagnostics` would cut the hub off from the
- * node's identity or from noticing that it has gone quiet.
- */
-static uint8_t system_common_read(lb_node_t *node, uint8_t endpoint, uint8_t element,
-                                  uint8_t *out, uint8_t cap, uint8_t *len)
-{
-    static const uint16_t type_ids[] = {LB_TYPE_DEVICE, LB_TYPE_DIAGNOSTICS, LB_TYPE_GROUPS};
-    const lb_reporting_t *reporting = &node->system_reporting[endpoint];
-    *len = 0;
-    switch (element) {
-    case LB_COMMON_TYPEID:
-        *len = lb_encode(LB_T_U16, LB_NUM(type_ids[endpoint]), out, cap);
-        break;
-    case LB_COMMON_TYPEREVISION:
-        *len = lb_encode(LB_T_U8, LB_NUM(1), out, cap);
-        break;
-    case LB_COMMON_FEATURES:
-    case LB_COMMON_QUERYENABLED:
-        *len = lb_encode(LB_T_MAP16, LB_NUM(0), out, cap);
-        break;
-    case LB_COMMON_ENABLED:
-        *len = lb_encode(LB_T_BOOL, LB_NUM(1), out, cap);
-        break;
-    case LB_COMMON_CHANNEL:
-        *len = lb_encode(LB_T_U8, LB_NUM(0), out, cap);
-        break;
-    case LB_COMMON_REPORTINTERVAL:
-        *len = lb_encode(LB_T_U16, LB_NUM(reporting->report_interval), out, cap);
-        break;
-    case LB_COMMON_REPORTMINGAP:
-        *len = lb_encode(LB_T_U16, LB_NUM(reporting->report_min_gap), out, cap);
-        break;
-    case LB_COMMON_REPORTHYSTERESIS:
-        *len = lb_encode(LB_T_U16, LB_NUM(reporting->report_hysteresis), out, cap);
-        break;
-    default:
-        return LB_RESULT_UNSUPPORTED_ELEMENT;
-    }
-    return *len ? LB_RESULT_OK : LB_RESULT_FAILURE;
-}
-
-/** Writing the common attributes of a system endpoint.
- *
- * Only the reporting settings take a new value. `Enabled` accepts 1, which changes
- * nothing, and refuses 0 with `INVALID_VALUE` — the attribute is writable, just not
- * to that value. `QueryEnabled` is the same: the system types declare no inputs, so
- * the only valid map is 0.
- */
-static uint8_t system_common_write(lb_node_t *node, uint8_t endpoint, uint8_t element,
-                                   const uint8_t *data, uint8_t len)
-{
-    lb_reporting_t *reporting = &node->system_reporting[endpoint];
-    lb_value_t v;
-    switch (element) {
-    case LB_COMMON_TYPEID:
-    case LB_COMMON_TYPEREVISION:
-    case LB_COMMON_FEATURES:
-    case LB_COMMON_CHANNEL:
-        return LB_RESULT_READ_ONLY;
-    case LB_COMMON_ENABLED:
-        if (!lb_decode(LB_T_BOOL, data, len, &v) || v.absent || v.value == 0) {
-            return LB_RESULT_INVALID_VALUE;
-        }
-        return LB_RESULT_OK;
-    case LB_COMMON_QUERYENABLED:
-        if (!lb_decode(LB_T_MAP16, data, len, &v) || v.absent || v.value != 0) {
-            return LB_RESULT_INVALID_VALUE;
-        }
-        return LB_RESULT_OK;
-    case LB_COMMON_REPORTINTERVAL:
-    case LB_COMMON_REPORTMINGAP:
-    case LB_COMMON_REPORTHYSTERESIS:
-        if (!lb_decode(LB_T_U16, data, len, &v) || v.absent) {
-            return LB_RESULT_INVALID_VALUE;
-        }
-        break;
-    default:
-        return LB_RESULT_UNSUPPORTED_ELEMENT;
-    }
-    uint16_t value = (uint16_t)v.value;
-    if (element == LB_COMMON_REPORTINTERVAL) {
-        reporting->report_interval = value;
-    } else if (element == LB_COMMON_REPORTMINGAP) {
-        reporting->report_min_gap = value;
-    } else {
-        reporting->report_hysteresis = value;
-    }
-    return LB_RESULT_OK;
-}
-
 static uint8_t system_read(lb_node_t *node, uint8_t endpoint, uint8_t element,
                            uint8_t *out, uint8_t cap, uint8_t *len)
 {
@@ -549,7 +772,7 @@ static uint8_t system_read(lb_node_t *node, uint8_t endpoint, uint8_t element,
         return LB_RESULT_UNSUPPORTED_ENDPOINT; /* ep3 Scenes — not in this device */
     }
     if (element >= LB_COMMON_BASE) {
-        return system_common_read(node, endpoint, element, out, cap, len);
+        return lb_endpoint_read(&node->system[endpoint], element, out, cap, len);
     }
     if (endpoint == LB_EP_DIAGNOSTICS) {
         return diagnostics_read(node, element, out, cap, len);
@@ -564,7 +787,7 @@ static uint8_t system_write(lb_node_t *node, uint8_t endpoint, uint8_t element,
         return LB_RESULT_UNSUPPORTED_ENDPOINT; /* ep3 Scenes — not in this device */
     }
     if (element >= LB_COMMON_BASE) {
-        return system_common_write(node, endpoint, element, data, len);
+        return lb_endpoint_write(&node->system[endpoint], element, data, len);
     }
     /* The only setting of the system types themselves. The rest are counters and
      * description — those are read. `Device` describes the device and has none. */
@@ -699,6 +922,7 @@ static bool carry_out_reset(lb_node_t *node)
             node->platform->store(node->platform->ctx, NVS_KEY_ADDRESS, &node->address,
                                   sizeof node->address);
         }
+        erase_settings(node);
     }
     if (node->platform->restart != NULL) {
         node->platform->restart(node->platform->ctx);
@@ -744,6 +968,16 @@ static void read_health(lb_node_t *node)
     uint8_t state = LB_BUS_ACTIVE;
     if (node->bus->health == NULL || !node->bus->health(node->bus->ctx, &tec, &rec, &state)) {
         state = LB_BUS_ACTIVE;
+    } else {
+        /* The reported attributes of Diagnostics — the engine decides whether the change
+         * is worth a report (hysteresis 16 by default, types/0x0002-diagnostics.md §5.4). */
+        lb_endpoint_t *diag = &node->system[LB_EP_DIAGNOSTICS];
+        lb_endpoint_set(diag, LB_DIAG_TX_ERROR_COUNT, LB_NUM(tec));
+        lb_endpoint_set(diag, LB_DIAG_RX_ERROR_COUNT, LB_NUM(rec));
+        lb_endpoint_set(diag, LB_DIAG_BUS_STATE,
+                        LB_NUM(state == LB_BUS_OFF       ? LB_DIAG_BUS_OFF
+                               : state == LB_BUS_PASSIVE ? LB_DIAG_BUS_PASSIVE
+                                                         : LB_DIAG_BUS_ACTIVE));
     }
     if (state == LB_BUS_OFF && node->bus_state != LB_BUS_OFF) {
         node->bus_off_count++;
@@ -905,6 +1139,17 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
             result = lb_endpoint_write(ep, f.element, frame->data + 1,
                                       (uint8_t)(frame->len - 1u));
         }
+        if (result == LB_RESULT_OK) {
+            lb_endpoint_t *target = f.endpoint <= LB_EP_GROUPS ? &node->system[f.endpoint] : ep;
+            /* Stored BEFORE the reply (COMPLIANCE.md LB-NODE-027): a hub that got `OK`
+             * may cut the power the next moment. Anything not persistent is skipped by
+             * `lb_node_persist` itself. */
+            lb_node_persist(node, target, f.element);
+            if (f.element == LB_COMMON_REPORTINTERVAL) {
+                /* A new interval counts from now — not from a cycle the old one began. */
+                target->cycle_ms = node->platform->millis(node->platform->ctx);
+            }
+        }
     } else if (f.kind == LB_KIND_COMMAND) {
         /* A retry of a command already carried out gets the remembered reply and nothing
          * else — a second `Toggle` would put the light back where it was
@@ -923,6 +1168,12 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
                   : system_command(node, f.endpoint, f.element);
         } else if (ep == NULL) {
             result = LB_RESULT_UNSUPPORTED_ENDPOINT;
+        } else if (ep->common.disabled) {
+            /* A disabled endpoint "does not react" (01-model-danych.md §4), but a command
+             * always gets an answer: silence would read as a lost frame and be retried.
+             * Reads and writes still work — otherwise the hub could never switch it back
+             * on (zadania/zrobione/TASK-01.md N4). */
+            result = LB_RESULT_INVALID_STATE;
         } else if (ep->on_command == NULL) {
             result = LB_RESULT_UNSUPPORTED_ELEMENT;
         } else {
@@ -993,6 +1244,7 @@ void lb_node_tick(lb_node_t *node)
         }
         handle_frame(node, &frame);
     }
+    reporting_tick(node, now);
     report_state(node);
 }
 

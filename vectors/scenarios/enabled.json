@@ -1,0 +1,21 @@
+{
+  "about": "Enabled = 0 on a key (01-model-danych.md §4; zadania/zrobione/TASK-01.md N4): the endpoint keeps answering reads and writes, so the hub can switch it back on, and sends no events. A suppressed event does not use up a sequence number — nothing was sent, so there is no gap for the hub to see.",
+  "profile": "key",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "Enabled = 0", "rx": ["0A1084F3#0100"], "expect": ["0E1084F3#01"], "store": {"a4.f3": "00"}},
+    {"at": 200, "pin": false},
+    {"at": 215, "note": "settled"},
+    {"at": 300, "pin": true},
+    {"at": 315, "note": "released: no Click"},
+    {"at": 400, "note": "Enabled = 1", "rx": ["0A1084F3#0201"], "expect": ["0E1084F3#02"]},
+    {"at": 500, "pin": false},
+    {"at": 515},
+    {"at": 600, "pin": true},
+    {"at": 615, "note": "Click, sequence 0", "expect": ["02108403#0001"]}
+  ]
+}

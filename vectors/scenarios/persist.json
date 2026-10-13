@@ -1,0 +1,21 @@
+{
+  "about": "Persistent attributes (01-model-danych.md §3.1, `P`; zadania/zrobione/TASK-01.md N5, N6): every RW,P attribute, the common ones included, is stored under a<endpoint>.<id> as its bytes on the wire when a write succeeds, and loaded before Booted. A stored PowerOnBehaviour = OFF beats the profile's RESTORE — the setting the hub wrote survives the power cut it was meant for. A factory reset erases the stored settings; the outputs' own state (output4) is not a setting and stays.",
+  "profile": "output2",
+  "uid": "A1B2C3D400010203",
+  "jitter": 1500,
+  "store": {"address": "4200", "a4.13": "00", "output4": "01", "output5": "01", "a5.f9": "F401", "a1.f8": "3C00"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 0, "note": "ep4 stored OFF and stays off; ep5 restores", "driven": [0, 1]},
+    {"at": 100, "note": "the stored setting is the attribute", "rx": ["0C108413#01"], "expect": ["0E108413#0100"]},
+    {"at": 110, "note": "a common one too", "rx": ["0C1085F9#02"], "expect": ["0E1085F9#02F401"]},
+    {"at": 120, "note": "and one of Diagnostics", "rx": ["0C1081F8#03"], "expect": ["0E1081F8#033C00"]},
+    {"at": 200, "note": "PowerOnBehaviour = RESTORE, stored", "rx": ["0A108413#0402"], "expect": ["0E108413#04"], "store": {"a4.13": "02"}},
+    {"at": 210, "note": "Invert = 1, stored; the coil moves", "rx": ["0A108414#0501"], "expect": ["0E108414#05"], "store": {"a4.14": "01"}, "driven": [1, 1]},
+    {"at": 220, "note": "a refused write stores nothing", "rx": ["0A108400#0601"], "expect": ["0E108400#26"], "store": {"a4.00": null}},
+    {"at": 300, "note": "FactoryReset", "rx": ["06108002#074E47414C"], "expect": ["0E108002#07"]},
+    {"at": 349},
+    {"at": 350, "note": "the settings are gone, the state of the outputs is not", "store": {"address": "0000", "a4.13": null, "a4.14": null, "a5.f9": null, "a1.f8": null, "output4": "01"}}
+  ]
+}

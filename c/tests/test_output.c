@@ -26,7 +26,6 @@ static lb_attr_t attributes[] = {
     {LB_OUT_INVERT,             LB_T_BOOL,  LB_RW | LB_PERSIST, LB_NUM(0)},
     {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
     {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
-    {LB_COMMON_REPORTMINGAP,    LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
 };
 
 static lb_endpoint_t endpoints[] = {{
@@ -37,6 +36,12 @@ static lb_endpoint_t endpoints[] = {{
 static void set_attr(uint8_t element, int32_t value)
 {
     lb_endpoint_attr(&endpoints[0], element)->value = LB_NUM(value);
+}
+
+/** A common setting — the endpoint's `.common`, not a row (zadania/zrobione/TASK-01.md N1). */
+static void set_min_gap(uint16_t ms)
+{
+    endpoints[0].common.report_min_gap = ms;
 }
 
 static lb_transport_t bus;
@@ -88,7 +93,7 @@ int main(void)
         set_attr(LB_OUT_POWER_ON_BEHAVIOUR, LB_POWER_ON_OFF);
         set_attr(LB_OUT_INVERT, 0);
         set_attr(LB_OUT_AUTO_OFF_TIME, 0);
-        set_attr(LB_COMMON_REPORTMINGAP, 0);
+        set_min_gap(0);
         turn_on(true);
 
         LB_ASSERT(lb_output_command(&out, LB_OUT_CMD_ON) == LB_RESULT_OK);
@@ -229,7 +234,7 @@ int main(void)
 
     LB_TEST("every state change is a REPORT carrying the bare value");
     {
-        set_attr(LB_COMMON_REPORTMINGAP, 0);
+        set_min_gap(0);
         turn_on(true);
         lb_output_command(&out, LB_OUT_CMD_ON);
         LB_ASSERT(report_count() == 1);
@@ -242,7 +247,7 @@ int main(void)
 
     LB_TEST("MinGap holds back a flood but does NOT LOSE the last state");
     {
-        set_attr(LB_COMMON_REPORTMINGAP, 1000);
+        set_min_gap(1000);
         turn_on(true);
         lb_output_command(&out, LB_OUT_CMD_ON);   /* this one goes through */
         uint8_t after_first = report_count();
@@ -252,11 +257,11 @@ int main(void)
         LB_ASSERT(report_count() == after_first);
 
         a.clock += 1500;
-        lb_output_tick(&out, a.clock);
+        lb_node_tick(&node); /* held-back reports are the node's since TASK-01 */
         LB_ASSERT(report_count() == after_first + 1);
         /* and carries the CURRENT state, not the one from a moment ago */
         LB_ASSERT(a.from_node[a.sent - 1].data[0] == 0);
-        set_attr(LB_COMMON_REPORTMINGAP, 0);
+        set_min_gap(0);
     }
 
     LB_SUMMARY();

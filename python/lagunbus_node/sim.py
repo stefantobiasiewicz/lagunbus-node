@@ -130,6 +130,7 @@ def load() -> ctypes.CDLL:
     sig("lbs_state_name", text, i32)
     sig("lbs_led", b, ptr)
     sig("lbs_set_bus", None, ptr, u8)
+    sig("lbs_set_errors", None, ptr, u16, u16)
     sig("lbs_set_reset_reason", None, ptr, u8)
     sig("lbs_address", u16, ptr)
     sig("lbs_short_id", u32, ptr)
@@ -306,6 +307,10 @@ class SimDevice:
     def set_bus(self, state: int) -> None:
         """Make the port answer `health` with `state` (`BUS_STATES`) from now on."""
         self.lib.lbs_set_bus(self._h, state)
+
+    def set_errors(self, tec: int, rec: int) -> None:
+        """Make the port answer `health` with these error counters from now on."""
+        self.lib.lbs_set_errors(self._h, tec, rec)
 
     def set_reset_reason(self, reason: int) -> None:
         """What the platform says the last restart was — read at `start`."""

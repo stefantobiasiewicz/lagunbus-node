@@ -95,6 +95,7 @@ class Device(Protocol):
     def service_press(self) -> None: ...
     def state(self) -> str | None: ...
     def set_bus(self, state: str) -> None: ...
+    def set_errors(self, tec: int, rec: int) -> None: ...
     def set_reset_reason(self, reason: str) -> None: ...
 
 
@@ -304,6 +305,9 @@ class CDevice:
 
     def set_bus(self, state: str) -> None:
         self.device.set_bus(sim.BUS_STATES[state])
+
+    def set_errors(self, tec: int, rec: int) -> None:
+        self.device.set_errors(tec, rec)
 
     def set_reset_reason(self, reason: str) -> None:
         self.device.set_reset_reason(sim.RESET_REASONS[reason])

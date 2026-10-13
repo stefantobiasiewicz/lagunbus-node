@@ -97,12 +97,6 @@ extern "C" {
 #define LB_GROUPS_CAPACITY  0x00u
 #define LB_GROUPS_COUNT     0x01u
 
-/** System endpoint numbers — the same in every device (01-model-danych.md §2). */
-#define LB_EP_DEVICE       0u
-#define LB_EP_DIAGNOSTICS  1u
-#define LB_EP_GROUPS       2u
-#define LB_EP_FIRST_USER   4u
-
 /** Node class — **nothing but the choice of address block** (03-adresacja.md §2.3).
  *
  * It is not a description of the device and not a permission. The hub reads it from
@@ -172,18 +166,10 @@ typedef enum {
  * device's loop (`lagunbus/tools/led.h` does exactly that). NULL — nobody looks. */
 typedef void (*lb_state_fn)(void *ctx, lb_node_state_t state);
 
-/** The reporting settings of one system endpoint.
- *
- * A system endpoint has the full set of common attributes (01-model-danych.md §4.1).
- * `Channel` and `Enabled` are fixed there and `QueryEnabled` is 0, so these three are
- * all that can actually differ — and the silence threshold is worked out from the
- * `ReportInterval` of `Diagnostics` (06-cykl-zycia-urzadzenia.md §5.1).
- */
-typedef struct {
-    uint16_t report_interval;
-    uint16_t report_min_gap;
-    uint16_t report_hysteresis;
-} lb_reporting_t;
+/** How many presses `PressCount` may lose at a power cut: the type stores it every 64,
+ * not at each one (types/0x0010-key-input.md §2.1) — a flash page outlives a wall switch
+ * that way. Here because the node keeps the store; the key counts. */
+#define LB_PRESS_COUNT_EVERY 64u
 
 /** One command carried out with `OK` — the key and when.
  *
@@ -244,8 +230,17 @@ typedef struct {
 
     /** `Diagnostics.ErrorThreshold` — the only setting of the system types themselves. */
     uint16_t error_threshold;
-    /** Common reporting attributes of ep0..ep2 — indexed by endpoint number. */
-    lb_reporting_t system_reporting[LB_EP_GROUPS + 1u];
+
+    /** ep0..ep2, indexed by number. Their own attributes are the node's (`Device` from
+     * the identity, `Diagnostics` from the counters), but their common set is an
+     * endpoint's like any other — read, written, stored and reported by the same code
+     * (01-model-danych.md §4.1; zadania/zrobione/TASK-01.md N1). The `ReportInterval` of
+     * `Diagnostics` is what the hub's silence threshold is worked out from
+     * (06-cykl-zycia-urzadzenia.md §5.1). */
+    lb_endpoint_t system[LB_EP_GROUPS + 1u];
+    /** The reported attributes of `Diagnostics` — `TxErrorCount`, `RxErrorCount`,
+     * `BusState` — for the reporting engine. Reads still go to the controller. */
+    lb_attr_t     diagnostics[3];
     uint16_t bus_off_count;
 
     /** Traffic watch. NULL means "do not look" and costs nothing. */
@@ -315,9 +310,24 @@ bool lb_node_send_segments(lb_node_t *node, uint8_t endpoint, uint8_t element,
 bool lb_node_report(lb_node_t *node, uint8_t endpoint, uint8_t element,
                     const uint8_t *value, uint8_t len);
 
-/** Send an event with its sequence number. `params` may be NULL. */
+/** Send an event with its sequence number. `params` may be NULL. Nothing goes out —
+ * and no sequence number is used up — from an endpoint with `Enabled = 0`. */
 bool lb_node_emit(lb_node_t *node, uint8_t endpoint, uint8_t event,
                   const uint8_t *params, uint8_t len);
+
+/** Send the reports an endpoint owes, now, as ONE round — or leave them for the tick
+ * when `ReportMinGap` has not passed since the last round (01-model-danych.md §6).
+ *
+ * A type calls it after `lb_endpoint_set`, once for everything it changed together:
+ * `Level` and `Transitioning` set one after the other and flushed once go out as one
+ * round, not two `ReportMinGap` apart (zadania/zrobione/TASK-01.md N3). Called from a command
+ * handler it puts the report before the reply, which is what the scenarios pin. */
+void lb_node_flush(lb_node_t *node, lb_endpoint_t *endpoint);
+
+/** Store one persistent attribute of `endpoint` as it is now. The node does this by
+ * itself after every write from the bus; a type calls it for a value it keeps itself
+ * (`PressCount`). Returns false when there is no store or it refused. */
+bool lb_node_persist(lb_node_t *node, lb_endpoint_t *endpoint, uint8_t element);
 
 #ifdef __cplusplus
 }
