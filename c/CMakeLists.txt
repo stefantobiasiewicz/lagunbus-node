@@ -24,6 +24,7 @@ set(LAGUNBUS_SOURCES
     lagunbus/src/tools/debounce.c
     lagunbus/src/tools/led.c
     lagunbus/src/tools/service.c
+    lagunbus/src/types/display.c
     lagunbus/src/types/key.c
     lagunbus/src/types/output.c
 )

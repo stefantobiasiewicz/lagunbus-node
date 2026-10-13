@@ -68,6 +68,7 @@ class EndpointType(IntEnum):
     ToggleInput = 0x13
     Output = 0x20
     Cover = 0x21
+    Display = 0x22
     Sense = 0x30
     Thermostat = 0x40
     Meter = 0x31

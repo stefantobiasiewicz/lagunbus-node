@@ -137,6 +137,35 @@ static uint8_t s_command(lb_endpoint_t *self, uint8_t element, const uint8_t *ar
     return lb_output_command(&ch->sim->outputs[ch->index], element);
 }
 
+static lb_display_t *s_display(lb_endpoint_t *self)
+{
+    lbs_channel_t *ch = self->ctx;
+    return &ch->sim->displays[ch->index];
+}
+
+static uint8_t s_display_write(lb_endpoint_t *self, uint8_t element, lb_value_t value)
+{
+    return lb_display_write(s_display(self), element, value);
+}
+
+static uint8_t s_display_write_text(lb_endpoint_t *self, uint8_t element,
+                                    const uint8_t *value, uint8_t len)
+{
+    return lb_display_write_text(s_display(self), element, value, len);
+}
+
+static uint8_t s_display_read_text(lb_endpoint_t *self, uint8_t element, uint8_t *out,
+                                   uint8_t cap, uint8_t *len)
+{
+    return lb_display_read_text(s_display(self), element, out, cap, len);
+}
+
+static void s_drawn(void *ctx, const lb_display_t *field)
+{
+    (void)field;
+    ((lbs_t *)ctx)->drawn++;
+}
+
 /** The next endpoint, its attribute rows copied in. NULL when the device is full. */
 static lb_endpoint_t *s_next(lbs_t *sim, uint16_t type, const lb_attr_t *attrs,
                              uint8_t count, lbs_role_t role, uint8_t index)
@@ -182,6 +211,28 @@ lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
     ep->on_command = s_command;
     ep->on_write = s_write;
     ep->ctx = &sim->channels[index];
+    return ep;
+}
+
+lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
+                               uint8_t count, uint16_t own_timeout_s)
+{
+    uint8_t index = sim->display_count;
+    lb_endpoint_t *ep = s_next(sim, LB_TYPE_DISPLAY, attrs, count, LBS_DISPLAY, index);
+    if (ep == NULL) {
+        return NULL;
+    }
+    sim->display_count++;
+    ep->channel = 0;
+    ep->features = features;
+    ep->on_check = lb_display_check;
+    ep->feature_of = lb_display_feature_of;
+    ep->on_write = s_display_write;
+    ep->on_write_long = s_display_write_text;
+    ep->on_read_long = s_display_read_text;
+    sim->display_channels[index] = (lbs_channel_t){.sim = sim, .index = index};
+    ep->ctx = &sim->display_channels[index];
+    sim->own_timeout[index] = own_timeout_s;
     return ep;
 }
 
@@ -318,6 +369,9 @@ void lbs_start(lbs_t *sim, uint32_t pins)
         } else if (sim->role[i] == LBS_OUTPUT) {
             lb_output_init(&sim->outputs[n], &sim->node, &sim->endpoints[i], s_drive,
                            &sim->channels[n]);
+        } else if (sim->role[i] == LBS_DISPLAY) {
+            lb_display_init(&sim->displays[n], &sim->node, &sim->endpoints[i],
+                            sim->own_timeout[n], s_drawn, sim);
         }
     }
 }
@@ -346,6 +400,8 @@ void lbs_loop(lbs_t *sim, uint32_t pins)
             lb_key_update(&sim->keys[n], &sim->node, stable, sim->clock);
         } else if (sim->role[i] == LBS_OUTPUT) {
             lb_output_tick(&sim->outputs[n], sim->clock);
+        } else if (sim->role[i] == LBS_DISPLAY) {
+            lb_display_tick(&sim->displays[n], sim->clock);
         }
     }
 }
@@ -398,6 +454,68 @@ int lbs_output_on(const lbs_t *sim, int output)
     }
     return on_off != NULL && !on_off->value.absent && on_off->value.value != 0 ? 1 : 0;
 }
+
+int lbs_display_count(const lbs_t *sim) { return sim->display_count; }
+
+static const lb_display_t *s_field(const lbs_t *sim, int field)
+{
+    return field >= 0 && field < sim->display_count ? &sim->displays[field] : NULL;
+}
+
+int lbs_display_endpoint(const lbs_t *sim, int field)
+{
+    const lb_display_t *d = s_field(sim, field);
+    return d == NULL ? -1 : d->endpoint->number;
+}
+
+int lbs_display_content(const lbs_t *sim, int field)
+{
+    const lb_display_t *d = s_field(sim, field);
+    return d == NULL ? -1 : lb_display_content(d);
+}
+
+/** `Quantity` of a VALUE field, -1 for a field without one. */
+int lbs_display_quantity(const lbs_t *sim, int field)
+{
+    const lb_display_t *d = s_field(sim, field);
+    if (d == NULL) {
+        return -1;
+    }
+    for (uint8_t a = 0; a < d->endpoint->attr_count; a++) {
+        const lb_attr_t *attr = &d->endpoint->attrs[a];
+        if (attr->id == LB_DSP_QUANTITY && !attr->value.absent) {
+            return attr->value.value;
+        }
+    }
+    return -1;
+}
+
+/** True with the number in `value`; false when the field has no value to show. */
+bool lbs_display_value(const lbs_t *sim, int field, int32_t *value)
+{
+    const lb_display_t *d = s_field(sim, field);
+    if (d == NULL) {
+        return false;
+    }
+    lb_value_t v = lb_display_value(d);
+    *value = v.value;
+    return !v.absent;
+}
+
+int lbs_display_text(const lbs_t *sim, int field, char *out, int cap)
+{
+    const lb_display_t *d = s_field(sim, field);
+    if (d == NULL || cap < 0) {
+        return -1;
+    }
+    uint8_t len = 0;
+    const char *text = lb_display_text(d, &len);
+    int n = len < cap ? len : cap;
+    memcpy(out, text, (size_t)n);
+    return n;
+}
+
+uint32_t lbs_display_drawn(const lbs_t *sim) { return sim->drawn; }
 
 void lbs_service_press(lbs_t *sim) { lb_node_factory_reset(&sim->node); }
 

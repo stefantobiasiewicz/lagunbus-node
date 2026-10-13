@@ -22,6 +22,7 @@
 #include "lagunbus/node.h"
 #include "lagunbus/tools/debounce.h"
 #include "lagunbus/tools/led.h"
+#include "lagunbus/types/display.h"
 #include "lagunbus/types/key.h"
 #include "lagunbus/types/output.h"
 
@@ -38,7 +39,7 @@
 
 typedef struct lbs lbs_t;
 
-typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT } lbs_role_t;
+typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT, LBS_DISPLAY } lbs_role_t;
 
 /** What an output's callbacks get as `ctx`: the device and WHICH output. */
 typedef struct {
@@ -79,6 +80,15 @@ struct lbs {
     lb_output_t   outputs[LBS_ENDPOINTS];
     lbs_channel_t channels[LBS_ENDPOINTS];
     int           driven[LBS_ENDPOINTS]; /**< last level each output drove; -1 before any */
+
+    /* Display fields (types/0x0022-display.md). `own_timeout` is the device's expiry for a
+     * field that does not expose `ContentTimeout`; `drawn` counts `show` calls, so a view
+     * knows to redraw. */
+    uint8_t       display_count;
+    lb_display_t  displays[LBS_ENDPOINTS];
+    lbs_channel_t display_channels[LBS_ENDPOINTS];
+    uint16_t      own_timeout[LBS_ENDPOINTS];
+    uint32_t      drawn;
 
     uint32_t clock;
     uint32_t jitter;
@@ -132,6 +142,12 @@ bool lbs_add_key(lbs_t *sim, uint16_t features, const lb_attr_t *attrs, uint8_t 
  * the endpoint, for the device to set its common defaults (`.common`), or NULL. */
 lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count);
 
+/** Add a display field, the same way, with channel 0 — a field belongs to no channel.
+ * `own_timeout_s` is its expiry when `attrs` has no `ContentTimeout`. Returns the
+ * endpoint or NULL. */
+lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
+                               uint8_t count, uint16_t own_timeout_s);
+
 /* --- the API for Python ------------------------------------------------------------- */
 
 size_t      lbs_device_count(void);
@@ -177,6 +193,17 @@ uint32_t lbs_inputs_idle(const lbs_t *sim);
 int      lbs_output_count(const lbs_t *sim);
 int      lbs_driven(const lbs_t *sim, int output);
 int      lbs_output_on(const lbs_t *sim, int output);
+
+/** Display fields, by index: how many, which endpoint, what each shows. `value` is the raw
+ * number with `absent` beside it; `text` copies at most `cap` bytes and returns the length.
+ * `drawn` grows whenever any field changed what it shows. */
+int      lbs_display_count(const lbs_t *sim);
+int      lbs_display_endpoint(const lbs_t *sim, int field);
+int      lbs_display_content(const lbs_t *sim, int field);
+int      lbs_display_quantity(const lbs_t *sim, int field);
+bool     lbs_display_value(const lbs_t *sim, int field, int32_t *value);
+int      lbs_display_text(const lbs_t *sim, int field, char *out, int cap);
+uint32_t lbs_display_drawn(const lbs_t *sim);
 
 /** The service button: `lb_node_factory_reset()`, as a board calls it after the hold. */
 void lbs_service_press(lbs_t *sim);

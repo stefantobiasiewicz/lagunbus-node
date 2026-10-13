@@ -98,7 +98,7 @@ The C library is split by what a piece IS:
 |---|---|---|
 | core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
 | `tools/` | `…/tools/debounce.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device) |
-| `types/` | `…/types/key.h`, `…/types/output.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
+| `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
 Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
 owns to `tools/` (`zadania/zrobione/CR-01.md`, step 6).
@@ -122,7 +122,8 @@ scenario can check: `key` (every feature, every timing tunable), `bell` (no feat
 attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings),
 `panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
 `output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
-state), `out8` (as `devices/apps/out8`). `key` and `output` also come in 1 … 8 channels
+state), `out8` (as `devices/apps/out8`), `display` (three `Display` fields: a temperature,
+a text line, a humidity that can show text). `key` and `output` also come in 1 … 8 channels
 (`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
 one, the board they copy, is the default. Each step sets the clock, hands the node frames,
 sets the input pins (`pin` — one level, or a list for several inputs), and runs one turn
@@ -439,6 +440,41 @@ Pinned by `vectors/scenarios/reporting.json`, `persist.json`, `enabled.json` and
 `press_count.json`; `bus_state.json` and `bus_fault.json` now also expect the `BusState`
 reports.
 
+### Strings and `LONG_WRITE`: a hook per endpoint, one buffer per node (2026-10-13)
+
+`Display.Text` (zadania/zrobione/FEAT-12.md) is the first attribute that is both a string and
+writable, so the node had to learn to receive `LONG_WRITE` and to keep an attribute that
+is not a number.
+
+**A string is a row with `LB_T_STRING` and two endpoint hooks**, `on_read_long` and
+`on_write_long`; its bytes are the type's (`lb_display_t.text`). Rejected: bytes in
+`lb_attr_t` — a row is twelve bytes for every attribute of every board and a text needs
+dozens. `LB_T_STRING` is unknown to every value helper on purpose: an ordinary `WRITE`
+of it fails to decode (`INVALID_VALUE`), a report of it encodes to nothing. A read
+answers `SEGMENTED` and the node sends the bytes as `LONG_RESPONSE` — no longer only for
+`Uid`.
+
+**One assembly buffer per node**, `LB_LONG_WRITE_MAX` = 64 bytes with the prefix (N9):
+the spec lets a node assemble one value at a time (`05-mapowanie-can.md` §6.7), and
+`BUSY` answers segment 0 of a second one. A longer value is still taken to its LAST
+segment — the hub waits for one reply — and refused with `INVALID_VALUE`. The reply goes
+out once, after the LAST segment, with the Tid of segment 0. A gap or 100 ms of silence
+drops the value without a word: the hub's transaction times out and repeats the whole
+write, and a reply would only race it. The silence is measured when the next segment
+comes, not by the tick — a dropped value nobody continues changes nothing.
+
+**A scalar never travels in segments** (`02-typy-danych.md` §2.2, added with FEAT-12):
+the form is decided by the attribute's type, not by the value's length, so a long write
+of a number is `INVALID_VALUE` after the usual checks (endpoint, element, feature,
+access). The system endpoints have no writable string: `Uid` is `READ_ONLY`, `Address`
+and the common settings `INVALID_VALUE`.
+
+**`Value` is typed by `Quantity` in `lb_display_init`**, not by the board's row
+(`LB_DSP_ATTR_VALUE()` has no type): a temperature field cannot be given a `u16`.
+
+Pinned by `vectors/scenarios/long_write.json` (the mechanics, on `output`) and
+`display.json`.
+
 ## The registry
 
 ```sh
@@ -452,7 +488,10 @@ still carries Polish names, and the generator holds the translation table. It mu
 the one in `hub/tools/generate_registry.py`, and an unknown name fails on purpose.
 
 The endpoint catalogue (`types/*.md`) is prose, so attribute numbers are hand-copied in
-`types/key.h` and `types/output.h`. A type change means those, plus a scenario.
+`types/key.h`, `types/output.h` and `types/display.h`. A type change means those, plus a
+scenario. So are the quantities (`lb_quantity_type` in `values.c`, from
+`registry/quantities.yaml`, which the generator does not read): `vectors/codec.json`
+§ quantities pins every row.
 
 ## What is not here yet
 
@@ -461,8 +500,9 @@ hardware.
 
 **Transactions on the node side:**
 
-- `BUSY` when the node cannot act right now, with the right to retry (the fault overlay
-  can answer `BUSY` on the node's behalf, but the node itself never does);
+- `BUSY` when the node cannot act right now, with the right to retry — the node says it
+  only to segment 0 of a second `LONG_WRITE` while one is open (the fault overlay can
+  answer `BUSY` on the node's behalf for anything else);
 - a prioritised transmit queue: on overflow the oldest `REPORT` goes, never a
   `RESPONSE` or an `EVENT`.
 
@@ -473,7 +513,12 @@ re-enumeration, a restart without a change should not.
 tells, so on SocketCAN over a plain socket (`lagun-node`) and in the simulator without
 `bus` it reports nothing, and the hub's silence threshold falls back to polling.
 
-**Queries:** `QueryEnabled` is stored, but no type in the library has inputs, so the node
-never sends a QUERY.
+**Queries:** `QueryEnabled` is stored, but the node never sends a QUERY. `Display` is the
+first type with an input (`Value`, types/0x0022-display.md §4a); without an answer a field
+shows `NONE`, which the type allows. The hub has no source to answer from until
+zadania/FEAT-13.md either.
+
+**Strings in the store:** `lb_node_persist` encodes scalars only; a persistent `string`
+attribute would not be stored. None exists (`Display.Text` is `V`).
 
 **Groups:** the node declares `GroupCapacity = 0` and ignores broadcast frames.

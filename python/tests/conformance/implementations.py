@@ -171,6 +171,8 @@ def declare_codec(lib: ctypes.CDLL) -> ctypes.CDLL:
     sig("lb_decode", b, ctypes.c_int, ctypes.c_char_p, size, ctypes.POINTER(_Value))
     sig("lb_encode_blob", size, ctypes.c_char_p, size, ctypes.c_char_p, size)
     sig("lb_decode_blob", b, ptr, size, ctypes.POINTER(ptr), ctypes.POINTER(size))
+    sig("lb_string_whole", b, ctypes.c_char_p, size)
+    sig("lb_quantity_type", ctypes.c_int, u8)
 
     return lib
 
@@ -247,6 +249,15 @@ class CCodec:
         buf = ctypes.create_string_buffer(len(data) + 2)
         n = self.lib.lb_encode_blob(data, len(data), buf, len(data) + 2)
         return buf.raw[:n] if n else None
+
+    def string_whole(self, data: bytes) -> bool:
+        return bool(self.lib.lb_string_whole(data, len(data)))
+
+    def quantity_type(self, quantity: int) -> ValueType | None:
+        """The type of a quantity's values, `None` for one the library does not know
+        (`lb_quantity_type` answers `LB_T_COUNT` — past every position in `ValueType`)."""
+        number = int(self.lib.lb_quantity_type(quantity))
+        return list(ValueType)[number] if 0 <= number < len(ValueType) else None
 
     def decode_blob(self, data: bytes) -> bytes | None:
         # `lb_decode_blob` hands back a pointer INTO the input; through ctypes that is

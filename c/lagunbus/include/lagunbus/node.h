@@ -112,6 +112,33 @@ extern "C" {
 #define LB_SEGMENT_DATA  6u
 #define LB_SEGMENT_LAST  0x80u
 
+/** The largest value a node takes in as `LONG_WRITE`, prefix included — one buffer per
+ * node, because a node assembles one value at a time (05-mapowanie-can.md §6.7). 64 bytes
+ * is the text field of a display and a margin (zadania/zrobione/FEAT-12.md, N9): a device declares
+ * `TextLength` no larger than this minus the prefix. A longer value is still received to
+ * its LAST segment — the hub waits for one reply — and refused with `INVALID_VALUE`.
+ * A device with longer texts raises it at compile time; one with none can lower it. */
+#ifndef LB_LONG_WRITE_MAX
+#define LB_LONG_WRITE_MAX 64u
+#endif
+/** Silence after which a value under assembly is dropped (05-mapowanie-can.md §6.6). */
+#define LB_SEGMENT_TIMEOUT_MS 100u
+
+/** A `LONG_WRITE` under assembly. Keyed by endpoint and element — every segment of a
+ * value has the same identifier — and bound to the `Tid` of its segment 0, which the
+ * reply carries. */
+typedef struct {
+    bool     open;
+    bool     overflow; /**< more than `LB_LONG_WRITE_MAX` came: refused at the end */
+    uint8_t  endpoint;
+    uint8_t  element;
+    uint8_t  tid;
+    uint8_t  next;     /**< the segment number expected next */
+    uint8_t  len;
+    uint32_t last_ms;  /**< when the last segment came */
+    uint8_t  data[LB_LONG_WRITE_MAX];
+} lb_long_write_t;
+
 /** Identity and whatever the hub reads from `Device`. All of it fixed for the
  * node’s entire life. */
 typedef struct {
@@ -217,6 +244,9 @@ typedef struct {
 
     /** Commands of the last `LB_DEDUP_WINDOW_MS` — see `LB_DEDUP_ENTRIES`. */
     lb_dedup_t dedup[LB_DEDUP_ENTRIES];
+
+    /** The one `LONG_WRITE` being assembled (05-mapowanie-can.md §6.7). */
+    lb_long_write_t long_write;
 
     /** `Identify` runs while this is in the future (modulo 2^32, like every deadline). */
     bool     identifying;

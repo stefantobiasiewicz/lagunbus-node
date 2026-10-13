@@ -57,6 +57,7 @@
 #define LB_TYPE_TOGGLEINPUT                0x0013u
 #define LB_TYPE_OUTPUT                     0x0020u
 #define LB_TYPE_COVER                      0x0021u
+#define LB_TYPE_DISPLAY                    0x0022u
 #define LB_TYPE_SENSE                      0x0030u
 #define LB_TYPE_THERMOSTAT                 0x0040u
 #define LB_TYPE_METER                      0x0031u

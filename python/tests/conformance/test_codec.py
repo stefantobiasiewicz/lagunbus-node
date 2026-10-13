@@ -100,6 +100,17 @@ def test_blob_refused(c_codec: CCodec, v: dict[str, Any]) -> None:
     assert c_codec.decode_blob(bytes.fromhex(v["bytes"])) is None
 
 
+@pytest.mark.parametrize("v", DATA["strings"], ids=ids("strings"))
+def test_string_whole(c_codec: CCodec, v: dict[str, Any]) -> None:
+    assert c_codec.string_whole(bytes.fromhex(v["bytes"])) is v["whole"]
+
+
+@pytest.mark.parametrize("v", DATA["quantities"], ids=[q["quantity"] for q in DATA["quantities"]])
+def test_quantity_type(c_codec: CCodec, v: dict[str, Any]) -> None:
+    wanted = None if v["type"] is None else ValueType(v["type"])
+    assert c_codec.quantity_type(num(v["number"])) == wanted
+
+
 def test_value_types_are_declared_in_the_order_of_the_c_enum(c_codec: CCodec) -> None:
     """`ctypes` passes `lb_type_t` as a number taken from the position in `ValueType`.
     A reordering on either side would send every value through the wrong type — the

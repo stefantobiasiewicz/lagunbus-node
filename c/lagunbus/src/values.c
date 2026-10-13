@@ -130,6 +130,31 @@ bool lb_decode(lb_type_t type, const uint8_t *data, size_t len, lb_value_t *out)
     return true;
 }
 
+lb_type_t lb_quantity_type(uint8_t quantity)
+{
+    static const lb_type_t TYPES[] = {
+        [LB_QUANTITY_TEMPERATURE]   = LB_T_I16,
+        [LB_QUANTITY_HUMIDITY]      = LB_T_U16,
+        [LB_QUANTITY_ILLUMINANCE]   = LB_T_U32,
+        [LB_QUANTITY_CO2]           = LB_T_U16,
+        [LB_QUANTITY_VOC]           = LB_T_U16,
+        [LB_QUANTITY_PM25]          = LB_T_U16,
+        [LB_QUANTITY_PRESSURE]      = LB_T_U32,
+        [LB_QUANTITY_FLOW]          = LB_T_U32,
+        [LB_QUANTITY_SOIL_MOISTURE] = LB_T_U16,
+        [LB_QUANTITY_VOLTAGE]       = LB_T_U32,
+        [LB_QUANTITY_CURRENT]       = LB_T_I32,
+        [LB_QUANTITY_POWER]         = LB_T_I32,
+        [LB_QUANTITY_DISTANCE]      = LB_T_U32,
+    };
+    return quantity < sizeof TYPES / sizeof TYPES[0] ? TYPES[quantity] : LB_T_COUNT;
+}
+
+bool lb_string_whole(const uint8_t *data, size_t len)
+{
+    return data != NULL && len >= LB_STRING_PREFIX && (size_t)data[0] == len - LB_STRING_PREFIX;
+}
+
 size_t lb_encode_blob(const uint8_t *data, size_t len, uint8_t *out, size_t cap)
 {
     if (out == NULL || (data == NULL && len > 0) || len > 0xFFFFu) {

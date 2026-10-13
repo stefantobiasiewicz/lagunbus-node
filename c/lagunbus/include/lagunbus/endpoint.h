@@ -126,6 +126,23 @@ typedef uint8_t (*lb_check_fn)(const struct lb_endpoint *self, uint8_t element,
  */
 typedef uint16_t (*lb_feature_fn)(uint8_t element);
 
+/** The bytes of a `string` attribute (`LB_T_STRING`), length prefix included, into
+ * `out`. Returns a result code. The node sends them as `LONG_RESPONSE` segments after a
+ * `SEGMENTED` reply — a string never fits a frame (02-typy-danych.md §2.2).
+ *
+ * Why a hook and not bytes in `lb_attr_t`: a row is twelve bytes for every attribute
+ * of every board, and a text field needs dozens. Its storage is the type's, sized by the
+ * device (`TextLength`). */
+typedef uint8_t (*lb_long_read_fn)(struct lb_endpoint *self, uint8_t element,
+                                   uint8_t *out, uint8_t cap, uint8_t *len);
+
+/** A `string` attribute written with `LONG_WRITE`. `value` is the whole of it, prefix
+ * included, already checked to be whole and to be the string the attribute is; what is
+ * left is the type's own table (`TextLength`) and the reaction. Whole or not at all, as
+ * every write (04-interakcje.md §4): refuse before changing anything. */
+typedef uint8_t (*lb_long_write_fn)(struct lb_endpoint *self, uint8_t element,
+                                    const uint8_t *value, uint8_t len);
+
 typedef struct lb_endpoint {
     uint8_t   number;
     uint16_t  type_id;
@@ -151,6 +168,8 @@ typedef struct lb_endpoint {
     lb_write_fn   on_write;
     lb_check_fn   on_check;    /**< optional; NULL = the value type is the only check */
     lb_feature_fn feature_of;  /**< optional; NULL = no element is feature-bound */
+    lb_long_read_fn  on_read_long;  /**< optional; needed for any `LB_T_STRING` row */
+    lb_long_write_fn on_write_long; /**< optional; needed for a writable `LB_T_STRING` */
     void         *ctx;
 
     /* Reporting state — the node's (`lb_report_t`). */
@@ -171,6 +190,18 @@ uint8_t lb_endpoint_read(lb_endpoint_t *endpoint, uint8_t element,
 /** Write an attribute. Checks access, type and range — in that order. */
 uint8_t lb_endpoint_write(lb_endpoint_t *endpoint, uint8_t element,
                           const uint8_t *data, uint8_t len);
+
+/** Read a `string` attribute whole — what follows a `SEGMENTED` reply. The same checks
+ * as `lb_endpoint_read`; the bytes come from `on_read_long`. */
+uint8_t lb_endpoint_read_long(lb_endpoint_t *endpoint, uint8_t element,
+                              uint8_t *out, uint8_t cap, uint8_t *len);
+
+/** Write a value that came in segments (`LONG_WRITE`). The checks of
+ * 04-interakcje.md §4 in their order — endpoint, element, feature, access — then the
+ * form: only a `string` travels in segments, so a scalar here is `INVALID_VALUE`
+ * (02-typy-danych.md §2.2), and so is a string whose prefix disagrees with its bytes. */
+uint8_t lb_endpoint_write_long(lb_endpoint_t *endpoint, uint8_t element,
+                               const uint8_t *value, uint8_t len);
 
 /** Put back a value loaded from the persistent store — a write with the type's checks
  * but without the access check (`PressCount` is `RO` and persistent) and without

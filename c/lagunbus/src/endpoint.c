@@ -133,8 +133,26 @@ uint8_t lb_endpoint_read(lb_endpoint_t *endpoint, uint8_t element,
         /* The attribute exists but is write-only — a different thing from "absent". */
         return LB_RESULT_WRITE_ONLY;
     }
+    if (attr->type == LB_T_STRING) {
+        /* An announcement, not the value: the node sends the bytes as segments right
+         * after the reply (04-interakcje.md §3). */
+        return endpoint->on_read_long != NULL ? LB_RESULT_SEGMENTED : LB_RESULT_FAILURE;
+    }
     *len = lb_encode(attr->type, attr->value, out, cap);
     return *len ? LB_RESULT_OK : LB_RESULT_FAILURE;
+}
+
+uint8_t lb_endpoint_read_long(lb_endpoint_t *endpoint, uint8_t element,
+                              uint8_t *out, uint8_t cap, uint8_t *len)
+{
+    uint8_t scratch[1];
+    uint8_t ignored = 0;
+    uint8_t verdict = lb_endpoint_read(endpoint, element, scratch, sizeof scratch, &ignored);
+    if (verdict != LB_RESULT_SEGMENTED) {
+        return verdict == LB_RESULT_OK ? LB_RESULT_FAILURE : verdict;
+    }
+    *len = 0;
+    return endpoint->on_read_long(endpoint, element, out, cap, len);
 }
 
 /** Write a common setting. `TypeId` and friends describe the device and cannot be
@@ -225,6 +243,38 @@ uint8_t lb_endpoint_write(lb_endpoint_t *endpoint, uint8_t element,
                           const uint8_t *data, uint8_t len)
 {
     return write_value(endpoint, element, data, len, false);
+}
+
+uint8_t lb_endpoint_write_long(lb_endpoint_t *endpoint, uint8_t element,
+                               const uint8_t *value, uint8_t len)
+{
+    if (endpoint == NULL || value == NULL) {
+        return LB_RESULT_FAILURE;
+    }
+    lb_type_t type;
+    lb_value_t irrelevant;
+    if (is_common(endpoint, element, &type, &irrelevant)) {
+        /* Every common attribute is a scalar: the settable ones refuse the form, the
+         * description refuses the write itself. */
+        return lb_endpoint_common_setting(element) ? LB_RESULT_INVALID_VALUE
+                                                   : LB_RESULT_READ_ONLY;
+    }
+    uint8_t gate = feature_gate(endpoint, element);
+    if (gate != LB_RESULT_OK) {
+        return gate;
+    }
+    lb_attr_t *attr = lb_endpoint_attr(endpoint, element);
+    if (attr == NULL) {
+        return LB_RESULT_UNSUPPORTED_ELEMENT;
+    }
+    if (!(attr->access & LB_WO)) {
+        return LB_RESULT_READ_ONLY;
+    }
+    if (attr->type != LB_T_STRING || !lb_string_whole(value, len)) {
+        return LB_RESULT_INVALID_VALUE;
+    }
+    return endpoint->on_write_long != NULL ? endpoint->on_write_long(endpoint, element, value, len)
+                                           : LB_RESULT_FAILURE;
 }
 
 uint8_t lb_endpoint_restore(lb_endpoint_t *endpoint, uint8_t element,

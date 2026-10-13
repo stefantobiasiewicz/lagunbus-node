@@ -194,6 +194,40 @@ static void out8(lbs_t *sim, uint8_t channels)
     }
 }
 
+/* --- displays ----------------------------------------------------------------------- */
+
+/** Three fields, one of each kind a screen has (types/0x0022-display.md §6): a
+ * temperature with `ContentTimeout`, a 16-byte text line that keeps its own 120 s, and a
+ * humidity that can show a short text instead. No board yet: DEVICE-04 will be the
+ * e-paper with VALUE only. `DeviceType` 0x0024 is the simulator's, not a model's. */
+static void display(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t temperature[] = {
+        LB_DSP_ATTR_CONTENT(),
+        LB_DSP_ATTR_QUANTITY(LB_QUANTITY_TEMPERATURE),
+        LB_DSP_ATTR_VALUE(),
+        LB_DSP_ATTR_CONTENT_TIMEOUT(LB_DSP_TIMEOUT_DEFAULT_S),
+    };
+    static const lb_attr_t line[] = {
+        LB_DSP_ATTR_CONTENT(),
+        LB_DSP_ATTR_TEXT_LENGTH(16),
+        LB_DSP_ATTR_TEXT(),
+    };
+    static const lb_attr_t humidity[] = {
+        LB_DSP_ATTR_CONTENT(),
+        LB_DSP_ATTR_QUANTITY(LB_QUANTITY_HUMIDITY),
+        LB_DSP_ATTR_VALUE(),
+        LB_DSP_ATTR_TEXT_LENGTH(32),
+        LB_DSP_ATTR_TEXT(),
+        LB_DSP_ATTR_CONTENT_TIMEOUT(LB_DSP_TIMEOUT_DEFAULT_S),
+    };
+    sim->device_type = 0x0024;
+    lbs_add_display(sim, LB_DSP_F_VALUE, temperature, LBS_COUNT(temperature), 0);
+    lbs_add_display(sim, LB_DSP_F_TEXT, line, LBS_COUNT(line), 120);
+    lbs_add_display(sim, LB_DSP_F_VALUE | LB_DSP_F_TEXT, humidity, LBS_COUNT(humidity), 0);
+}
+
 /* --- the catalogue ------------------------------------------------------------------ */
 
 const lbs_device_t lbs_devices[] = {
@@ -206,6 +240,7 @@ const lbs_device_t lbs_devices[] = {
     {"output2",   "two relays that remember their state",                    output2,   0},
     {"output8",   "eight relays that remember their state",                  output8,   0},
     {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
+    {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
 };
 
 const size_t lbs_device_total = sizeof lbs_devices / sizeof lbs_devices[0];

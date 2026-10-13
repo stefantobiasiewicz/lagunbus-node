@@ -24,6 +24,7 @@ def test_the_catalogue_lists_every_device_with_a_description() -> None:
         "output2",
         "output8",
         "out8",
+        "display",
     ]
     assert all(d.about for d in devices())
 
@@ -82,3 +83,26 @@ def test_output_on_is_the_state_and_driven_the_coil() -> None:
     device.rx(Frame(0x06108401, b"\x01"))
     device.loop(0)
     assert (device.output_on(0), device.driven(0)) == (True, 1)
+
+
+def test_display_fields_show_what_was_written() -> None:
+    """Through the long write too: the text reaches `display_fields` whole, in UTF-8."""
+    screen = SimDevice("display", UID)
+    screen.store_put("address", bytes.fromhex("4200"))
+    screen.start(0)
+    drawn = screen.drawn
+    assert [(f.endpoint, f.content, f.quantity) for f in screen.display_fields] == [
+        (4, "NONE", 0),
+        (5, "NONE", None),
+        (6, "NONE", 1),
+    ]
+    text = "żółw".encode()
+    value = bytes([len(text)]) + text
+    screen.rx(Frame(0x0A108402, bytes([1]) + (2137).to_bytes(2, "little")))
+    screen.rx(Frame(0x14108504, bytes([0x02, 0]) + value[:6]))
+    screen.rx(Frame(0x14108504, bytes([0x82, 1]) + value[6:]))
+    screen.loop(0)
+    fields = screen.display_fields
+    assert (fields[0].content, fields[0].value) == ("VALUE", 2137)
+    assert (fields[1].content, fields[1].text) == ("TEXT", "żółw")
+    assert screen.drawn == drawn + 2

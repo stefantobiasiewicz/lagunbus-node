@@ -19,7 +19,9 @@
     {"note": "PRZYKLADY 8: read Uid", "kind": "READ", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x0C080000"},
     {"note": "PRZYKLADY 8: SEGMENTED reply", "kind": "RESPONSE", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x0E080000"},
     {"note": "PRZYKLADY 8: the segments", "kind": "LONG_RESPONSE", "address": "0x020", "endpoint": 0, "element": "0x00", "can_id": "0x12080000"},
-    {"note": "the highest possible identifier still fits in 29 bits", "kind": "JOIN", "address": "0x7FF", "endpoint": 63, "element": "0xFF", "can_id": "0x1FFFFFFF"}
+    {"note": "the highest possible identifier still fits in 29 bits", "kind": "JOIN", "address": "0x7FF", "endpoint": 63, "element": "0xFF", "can_id": "0x1FFFFFFF"},
+    {"note": "PRZYKLADY 10: hub -> Display.Value of 0x013", "kind": "WRITE", "address": "0x013", "endpoint": 4, "element": "0x02", "can_id": "0x0A04C402"},
+    {"note": "PRZYKLADY 10: Display.Text of 0x013 in segments", "kind": "LONG_WRITE", "address": "0x013", "endpoint": 5, "element": "0x04", "can_id": "0x1404C504"}
   ],
 
   "identifier_refusals": [
@@ -101,5 +103,30 @@
   "blob_refusals": [
     {"note": "the prefix lies — refused, not patched up", "bytes": "0900A1B2C3D400010203"},
     {"note": "too short for a prefix", "bytes": "08"}
+  ],
+
+  "strings": [
+    {"note": "PRZYKLADY 10: the text of a display field, prefix and UTF-8", "bytes": "0D5072616E696520676F746F7765", "whole": true},
+    {"note": "an empty string is its prefix alone", "bytes": "00", "whole": true},
+    {"note": "'ż' is two bytes, and the prefix counts bytes (types/0x0022-display.md §5.3)", "bytes": "02C5BC", "whole": true},
+    {"note": "the prefix lies (05-mapowanie-can.md §6.6)", "bytes": "056162", "whole": false},
+    {"note": "nothing at all is not even an empty string", "bytes": "", "whole": false}
+  ],
+
+  "quantities": [
+    {"note": "every row of lagunbus-spec/registry/quantities.yaml, quantities: — the type a ⟨Q⟩ value travels as", "quantity": "TEMPERATURE", "number": "0x00", "type": "i16"},
+    {"quantity": "HUMIDITY", "number": "0x01", "type": "u16"},
+    {"quantity": "ILLUMINANCE", "number": "0x02", "type": "u32"},
+    {"quantity": "CO2", "number": "0x03", "type": "u16"},
+    {"quantity": "VOC", "number": "0x04", "type": "u16"},
+    {"quantity": "PM25", "number": "0x05", "type": "u16"},
+    {"quantity": "PRESSURE", "number": "0x06", "type": "u32"},
+    {"quantity": "FLOW", "number": "0x07", "type": "u32"},
+    {"quantity": "SOIL_MOISTURE", "number": "0x08", "type": "u16"},
+    {"quantity": "VOLTAGE", "number": "0x09", "type": "u32"},
+    {"quantity": "CURRENT", "number": "0x0A", "type": "i32"},
+    {"quantity": "POWER", "number": "0x0B", "type": "i32"},
+    {"quantity": "DISTANCE", "number": "0x0C", "type": "u32"},
+    {"note": "past the last: unknown, not a guess", "quantity": "unknown", "number": "0x0D", "type": null}
   ]
 }

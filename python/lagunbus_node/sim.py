@@ -134,7 +134,31 @@ def load() -> ctypes.CDLL:
     sig("lbs_set_reset_reason", None, ptr, u8)
     sig("lbs_address", u16, ptr)
     sig("lbs_short_id", u32, ptr)
+    sig("lbs_display_count", i32, ptr)
+    sig("lbs_display_endpoint", i32, ptr, i32)
+    sig("lbs_display_content", i32, ptr, i32)
+    sig("lbs_display_quantity", i32, ptr, i32)
+    sig("lbs_display_value", b, ptr, i32, ctypes.POINTER(i32))
+    sig("lbs_display_text", i32, ptr, i32, text, i32)
+    sig("lbs_display_drawn", u32, ptr)
     return lib
+
+
+CONTENT: Final = ("NONE", "VALUE", "TEXT")
+"""`Display.Content` (types/0x0022-display.md §2.3), by value."""
+
+
+class DisplayField(NamedTuple):
+    """What one display field shows — what a screen would draw."""
+
+    endpoint: int
+    content: str
+    """`NONE`, `VALUE` or `TEXT`."""
+    quantity: int | None
+    """`Quantity` of a field with VALUE; the scale and unit are the viewer's."""
+    value: int | None
+    """The raw number, `None` when there is none to show."""
+    text: str
 
 
 class DeviceInfo(NamedTuple):
@@ -315,6 +339,36 @@ class SimDevice:
     def set_reset_reason(self, reason: int) -> None:
         """What the platform says the last restart was — read at `start`."""
         self.lib.lbs_set_reset_reason(self._h, reason)
+
+    # --- display fields (types/0x0022-display.md) -------------------------------------
+
+    @property
+    def display_fields(self) -> list[DisplayField]:
+        fields = []
+        for i in range(self.lib.lbs_display_count(self._h)):
+            content = int(self.lib.lbs_display_content(self._h, i))
+            quantity = int(self.lib.lbs_display_quantity(self._h, i))
+            raw = ctypes.c_int32()
+            has_value = bool(self.lib.lbs_display_value(self._h, i, ctypes.byref(raw)))
+            buf = ctypes.create_string_buffer(256)
+            n = int(self.lib.lbs_display_text(self._h, i, buf, 256))
+            fields.append(
+                DisplayField(
+                    endpoint=int(self.lib.lbs_display_endpoint(self._h, i)),
+                    content=CONTENT[content] if 0 <= content < len(CONTENT) else str(content),
+                    quantity=None if quantity < 0 else quantity,
+                    value=int(raw.value) if has_value else None,
+                    # The field draws what it can and `?` for the rest (§5.3) — so does
+                    # this, for bytes that are not UTF-8.
+                    text=buf.raw[: max(n, 0)].decode("utf-8", errors="replace"),
+                )
+            )
+        return fields
+
+    @property
+    def drawn(self) -> int:
+        """Grows whenever a field changed what it shows — the view's cue to redraw."""
+        return int(self.lib.lbs_display_drawn(self._h))
 
     @property
     def address(self) -> int:

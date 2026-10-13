@@ -1129,6 +1129,112 @@ static void respond(lb_node_t *node, const lb_fields_t *f, uint8_t tid,
     }
 }
 
+/* --- LONG_WRITE (05-mapowanie-can.md §6) -------------------------------------------
+ *
+ * The first user is the text of a display field (types/0x0022-display.md; zadania/zrobione/FEAT-12.md).
+ * Segments carry no header byte: [0] is LAST and the Tid, [1] the segment number. The node
+ * answers ONCE, after the LAST segment, with an ordinary RESPONSE and the Tid of segment 0
+ * — to the hub it is one write that took several frames (04-interakcje.md §4). */
+
+/** A long write to `Device`, `Diagnostics` or `Groups`. None of them has a writable
+ * string: what exists is read-only (`Uid`) or a scalar that never travels in segments
+ * (`Address`, `ErrorThreshold`, the common settings — 02-typy-danych.md §2.2). */
+static uint8_t system_long_write(lb_node_t *node, uint8_t endpoint, uint8_t element,
+                                 const uint8_t *value, uint8_t len)
+{
+    if (endpoint > LB_EP_GROUPS) {
+        return LB_RESULT_UNSUPPORTED_ENDPOINT; /* ep3 Scenes — not in this device */
+    }
+    if (element >= LB_COMMON_BASE) {
+        return lb_endpoint_write_long(&node->system[endpoint], element, value, len);
+    }
+    if ((endpoint == LB_EP_DEVICE && element == LB_DEV_ADDRESS)
+        || (endpoint == LB_EP_DIAGNOSTICS && element == LB_DIAG_ERROR_THRESHOLD)) {
+        return LB_RESULT_INVALID_VALUE;
+    }
+    /* Whether the element exists at all is what a read knows; reads have no side effects. */
+    uint8_t scratch[LB_MAX_PAYLOAD];
+    uint8_t n = 0;
+    uint8_t exists = endpoint == LB_EP_DEVICE
+                   ? device_read(node, element, scratch, sizeof scratch, &n)
+                   : system_read(node, endpoint, element, scratch, sizeof scratch, &n);
+    return exists == LB_RESULT_UNSUPPORTED_ELEMENT ? exists : LB_RESULT_READ_ONLY;
+}
+
+static uint8_t long_write(lb_node_t *node, const lb_long_write_t *lw)
+{
+    if (lw->overflow) {
+        return LB_RESULT_INVALID_VALUE; /* longer than any attribute this node has */
+    }
+    if (lw->endpoint < LB_EP_FIRST_USER) {
+        return system_long_write(node, lw->endpoint, lw->element, lw->data, lw->len);
+    }
+    lb_endpoint_t *ep = lb_node_endpoint(node, lw->endpoint);
+    return ep == NULL ? LB_RESULT_UNSUPPORTED_ENDPOINT
+                      : lb_endpoint_write_long(ep, lw->element, lw->data, lw->len);
+}
+
+/** One segment of a `LONG_WRITE`.
+ *
+ * Segment 0 opens a value — and starts afresh when the same value is already open: a
+ * retry has the same Tid, so only the number tells it from the first try (§6.5). Segment
+ * 0 of a DIFFERENT value while one is open gets `BUSY` at once: one value at a time
+ * (§6.7), and `BUSY` is the code worth retrying on. A gap, or 100 ms without the next
+ * segment, drops the value whole and says nothing (§6.6) — the hub's transaction times
+ * out and repeats the whole write; a reply here would only race it. The timeout is
+ * checked when the next segment comes, not by the tick: a dropped value that nobody
+ * continues changes nothing, and checking here also settles a segment 0 of another value
+ * after the silence, which then opens instead of getting `BUSY`. */
+static void take_segment(lb_node_t *node, const lb_fields_t *f, const lb_frame_t *frame)
+{
+    if (frame->len < 2u) {
+        return; /* not even its two header bytes — broken */
+    }
+    lb_long_write_t *lw = &node->long_write;
+    uint32_t now = node->platform->millis(node->platform->ctx);
+    if (lw->open && now - lw->last_ms >= LB_SEGMENT_TIMEOUT_MS) {
+        lw->open = false;
+    }
+    uint8_t tid = (uint8_t)(frame->data[0] & 0x07u);
+    uint8_t number = frame->data[1];
+    bool same = lw->open && lw->endpoint == f->endpoint && lw->element == f->element;
+
+    if (number == 0u) {
+        if (lw->open && !same) {
+            respond(node, f, tid, LB_RESULT_BUSY, NULL, 0);
+            return;
+        }
+        lw->open = true;
+        lw->overflow = false;
+        lw->endpoint = f->endpoint;
+        lw->element = f->element;
+        lw->tid = tid;
+        lw->next = 0;
+        lw->len = 0;
+    } else if (!same) {
+        return; /* a segment of a value we are not assembling */
+    } else if (number != lw->next) {
+        lw->open = false; /* a gap */
+        return;
+    }
+
+    uint8_t chunk = (uint8_t)(frame->len - 2u);
+    if (!lw->overflow && (size_t)lw->len + chunk > LB_LONG_WRITE_MAX) {
+        lw->overflow = true;
+    }
+    if (!lw->overflow) {
+        memcpy(lw->data + lw->len, frame->data + 2, chunk);
+        lw->len = (uint8_t)(lw->len + chunk);
+    }
+    lw->next++;
+    lw->last_ms = now;
+    if (!(frame->data[0] & LB_SEGMENT_LAST)) {
+        return;
+    }
+    lw->open = false;
+    respond(node, f, lw->tid, long_write(node, lw), NULL, 0);
+}
+
 static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
 {
     if (lb_is_join(frame->can_id)) {
@@ -1149,6 +1255,11 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
     }
     if (frame->len == 0) {
         return; /* a transactional message with no header byte is broken */
+    }
+
+    if (f.kind == LB_KIND_LONG_WRITE) {
+        take_segment(node, &f, frame);
+        return;
     }
 
     uint8_t tid = 0;
@@ -1249,6 +1360,16 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
         uint8_t length = (uint8_t)lb_encode_blob(node->identity.uid, LB_UID_LEN,
                                                   blob, sizeof blob);
         lb_node_send_segments(node, f.endpoint, f.element, tid, blob, length);
+    } else if (result == LB_RESULT_SEGMENTED && f.endpoint >= LB_EP_FIRST_USER) {
+        /* A string attribute of a functional endpoint. The largest string is 255 bytes
+         * of text with its prefix (`TextLength` is a `u8`); on the stack only for this
+         * read, which a display field gets once in a while. */
+        uint8_t text[255];
+        uint8_t length = 0;
+        if (lb_endpoint_read_long(lb_node_endpoint(node, f.endpoint), f.element, text,
+                                  sizeof text, &length) == LB_RESULT_OK) {
+            lb_node_send_segments(node, f.endpoint, f.element, tid, text, length);
+        }
     }
 }
 
