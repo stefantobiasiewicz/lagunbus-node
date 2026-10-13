@@ -198,8 +198,8 @@ static void out8(lbs_t *sim, uint8_t channels)
 
 /** Three fields, one of each kind a screen has (types/0x0022-display.md §6): a
  * temperature with `ContentTimeout`, a 16-byte text line that keeps its own 120 s, and a
- * humidity that can show a short text instead. No board yet: DEVICE-04 will be the
- * e-paper with VALUE only. `DeviceType` 0x0024 is the simulator's, not a model's. */
+ * humidity that can show a short text instead — the type's whole range, not a board
+ * (the board is `epd`, below). `DeviceType` 0x0024 is the simulator's, not a model's. */
 static void display(lbs_t *sim, uint8_t channels)
 {
     (void)channels;
@@ -226,6 +226,41 @@ static void display(lbs_t *sim, uint8_t channels)
     lbs_add_display(sim, LB_DSP_F_VALUE, temperature, LBS_COUNT(temperature), 0);
     lbs_add_display(sim, LB_DSP_F_TEXT, line, LBS_COUNT(line), 120);
     lbs_add_display(sim, LB_DSP_F_VALUE | LB_DSP_F_TEXT, humidity, LBS_COUNT(humidity), 0);
+}
+
+/** The board `epd` (devices/apps/epd, zadania/zrobione/DEVICE-04.md): the Waveshare 1.9″
+ * segment e-paper — a temperature in "188.8 °C" on ep4, a humidity in "88.8 %" on ep5,
+ * VALUE only, each with `ContentTimeout` (N6). The glass is paced as the board paces it —
+ * at most every 60 s, a full refresh after 10 partial ones (N3); the board takes both from
+ * Kconfig, these are its defaults. The layouts are the board's too (N1): −9.9 … 199.9 °C,
+ * 0.0 … 99.9 %. `DeviceType` 0x0023 (N8). */
+static void epd(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t temperature[] = {
+        LB_DSP_ATTR_CONTENT(),
+        LB_DSP_ATTR_QUANTITY(LB_QUANTITY_TEMPERATURE),
+        LB_DSP_ATTR_VALUE(),
+        LB_DSP_ATTR_CONTENT_TIMEOUT(LB_DSP_TIMEOUT_DEFAULT_S),
+    };
+    static const lb_attr_t humidity[] = {
+        LB_DSP_ATTR_CONTENT(),
+        LB_DSP_ATTR_QUANTITY(LB_QUANTITY_HUMIDITY),
+        LB_DSP_ATTR_VALUE(),
+        LB_DSP_ATTR_CONTENT_TIMEOUT(LB_DSP_TIMEOUT_DEFAULT_S),
+    };
+    static const lb_digits_t degrees = {.whole = 2, .leading_one = true, .decimals = 1,
+                                        .minus = true};
+    static const lb_digits_t percent = {.whole = 2, .leading_one = false, .decimals = 1,
+                                        .minus = false};
+    sim->device_type = 0x0023;
+    lbs_epaper(sim, 60000u, 10u);
+    lbs_display_digits(sim, lbs_add_display(sim, LB_DSP_F_VALUE, temperature,
+                                            LBS_COUNT(temperature), 0),
+                       &degrees);
+    lbs_display_digits(sim, lbs_add_display(sim, LB_DSP_F_VALUE, humidity,
+                                            LBS_COUNT(humidity), 0),
+                       &percent);
 }
 
 /* --- sensors ------------------------------------------------------------------------ */
@@ -274,6 +309,7 @@ const lbs_device_t lbs_devices[] = {
     {"output8",   "eight relays that remember their state",                  output8,   0},
     {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
     {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
+    {"epd",       "e-paper as devices/apps/epd: temperature and humidity",   epd,       0},
     {"env",       "a room sensor: temperature, humidity, light",             env,       0},
 };
 

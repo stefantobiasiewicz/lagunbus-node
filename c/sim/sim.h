@@ -26,6 +26,8 @@
 #include "lagunbus/types/key.h"
 #include "lagunbus/types/output.h"
 #include "lagunbus/types/sense.h"
+#include "lagunbus/tools/digits.h"
+#include "lagunbus/tools/epaper.h"
 
 #include <stddef.h>
 
@@ -90,6 +92,18 @@ struct lbs {
     lbs_channel_t display_channels[LBS_ENDPOINTS];
     uint16_t      own_timeout[LBS_ENDPOINTS];
     uint32_t      drawn;
+
+    /* An e-paper screen of segment digits (zadania/zrobione/DEVICE-04.md, N9): the fields
+     * that have `digits` are drawn in their places (`lagunbus/tools/digits.h`) and the
+     * glass changes when `lagunbus/tools/epaper.h` says so — as on the board, so the view
+     * shows what the glass would, a gap behind the fields. The refresh itself takes no
+     * time here: what the board waits on is its panel, not the library. */
+    bool        epaper;
+    lb_epaper_t pacer;
+    bool        segmented[LBS_ENDPOINTS];
+    lb_digits_t digits[LBS_ENDPOINTS];
+    char        glass[LBS_ENDPOINTS][LB_DIGITS_MAX + 1];
+    uint32_t    refreshes;
 
     /* Sensors (types/0x0030-sense.md). What they measure comes from Python —
      * `lbs_sense_update` — as a board's application hands in what it read. */
@@ -156,6 +170,13 @@ lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
 lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
                                uint8_t count, uint16_t own_timeout_s);
 
+/** Make the display an e-paper screen, paced as `lagunbus/tools/epaper.h` paces it. */
+void lbs_epaper(lbs_t *sim, uint32_t min_gap_ms, uint8_t full_every);
+
+/** Draw `field` (as `lbs_add_display` returned it) in segment places: `layout`, its value
+ * in hundredths. Only on an e-paper screen. */
+void lbs_display_digits(lbs_t *sim, const lb_endpoint_t *field, const lb_digits_t *layout);
+
 /** Add a sensor of `quantity` with `features`, the same way, with channel 0 — it
  * measures the room, not a channel (§5.6) — and the quantity's defaults
  * (`lb_sense_defaults`). `attrs` must hold `Value` and `Quantity`, and the rows of the
@@ -219,6 +240,14 @@ int      lbs_display_quantity(const lbs_t *sim, int field);
 bool     lbs_display_value(const lbs_t *sim, int field, int32_t *value);
 int      lbs_display_text(const lbs_t *sim, int field, char *out, int cap);
 uint32_t lbs_display_drawn(const lbs_t *sim);
+
+/** The e-paper glass: what `field` shows there now — characters as
+ * `lagunbus/tools/digits.h` gives them — and its length, or -1 for a field without
+ * segment places. `pending`: the fields have changed and the glass waits for its refresh.
+ * `refreshes` counts them, the clear at start included. */
+int      lbs_display_glass(const lbs_t *sim, int field, char *out, int cap);
+bool     lbs_display_pending(const lbs_t *sim);
+uint32_t lbs_display_refreshes(const lbs_t *sim);
 
 /** Sensors, by index: how many, which endpoint, `Quantity`, and the current `Value`
  * (false when absent). `update` hands in a measurement, `fail` a failed reading — what a

@@ -141,6 +141,9 @@ def load() -> ctypes.CDLL:
     sig("lbs_display_value", b, ptr, i32, ctypes.POINTER(i32))
     sig("lbs_display_text", i32, ptr, i32, text, i32)
     sig("lbs_display_drawn", u32, ptr)
+    sig("lbs_display_glass", i32, ptr, i32, text, i32)
+    sig("lbs_display_pending", b, ptr)
+    sig("lbs_display_refreshes", u32, ptr)
     sig("lbs_sense_count", i32, ptr)
     sig("lbs_sense_endpoint", i32, ptr, i32)
     sig("lbs_sense_quantity", i32, ptr, i32)
@@ -165,6 +168,10 @@ class DisplayField(NamedTuple):
     value: int | None
     """The raw number, `None` when there is none to show."""
     text: str
+    glass: str | None = None
+    """On an e-paper of segment digits (`epd`): what the glass shows now, one character a
+    place (`lagunbus/tools/digits.h`) — behind the field until the next refresh. `None`
+    for a field without segment places."""
 
 
 class Sensor(NamedTuple):
@@ -369,6 +376,8 @@ class SimDevice:
             has_value = bool(self.lib.lbs_display_value(self._h, i, ctypes.byref(raw)))
             buf = ctypes.create_string_buffer(256)
             n = int(self.lib.lbs_display_text(self._h, i, buf, 256))
+            places = ctypes.create_string_buffer(32)
+            g = int(self.lib.lbs_display_glass(self._h, i, places, 32))
             fields.append(
                 DisplayField(
                     endpoint=int(self.lib.lbs_display_endpoint(self._h, i)),
@@ -378,6 +387,7 @@ class SimDevice:
                     # The field draws what it can and `?` for the rest (§5.3) — so does
                     # this, for bytes that are not UTF-8.
                     text=buf.raw[: max(n, 0)].decode("utf-8", errors="replace"),
+                    glass=places.raw[:g].decode("ascii") if g >= 0 else None,
                 )
             )
         return fields
@@ -410,6 +420,16 @@ class SimDevice:
                     self.lib.lbs_sense_update(self._h, i, raw)
                 return
         raise ValueError(f"no sensor at ep{endpoint}")
+
+    @property
+    def display_pending(self) -> bool:
+        """The fields changed and the e-paper glass waits for its refresh."""
+        return bool(self.lib.lbs_display_pending(self._h))
+
+    @property
+    def display_refreshes(self) -> int:
+        """Refreshes of the e-paper glass, the clear at start included."""
+        return int(self.lib.lbs_display_refreshes(self._h))
 
     @property
     def drawn(self) -> int:

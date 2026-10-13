@@ -25,6 +25,7 @@ def test_the_catalogue_lists_every_device_with_a_description() -> None:
         "output8",
         "out8",
         "display",
+        "epd",
         "env",
     ]
     assert all(d.about for d in devices())
@@ -107,6 +108,49 @@ def test_display_fields_show_what_was_written() -> None:
     assert (fields[0].content, fields[0].value) == ("VALUE", 2137)
     assert (fields[1].content, fields[1].text) == ("TEXT", "żółw")
     assert screen.drawn == drawn + 2
+
+
+def test_epd_shows_on_the_glass_what_the_board_would() -> None:
+    """`epd` (zadania/zrobione/DEVICE-04.md, N3, N9): the fields drawn in the e-paper's
+    places and refreshed as the board refreshes — the clear at start, a value at once while
+    the glass shows none, the next change only after the gap."""
+    screen = SimDevice("epd", UID)
+    screen.store_put("address", bytes.fromhex("4200"))
+    screen.start(0)
+    screen.loop(0)
+
+    def glass() -> list[str | None]:
+        return [f.glass for f in screen.display_fields]
+
+    def pending() -> bool:
+        # A function, not the property: mypy would keep the property narrowed by the
+        # first assert and call the later ones unreachable.
+        return screen.display_pending
+
+    assert [(f.endpoint, f.quantity) for f in screen.display_fields] == [(4, 0), (5, 1)]
+    assert glass() == [" --.-", "--.-"], "cleared at start: empty fields are dashes"
+    assert screen.display_refreshes == 1 and not pending()
+
+    screen.rx(Frame(0x0A108402, bytes([1]) + (2137).to_bytes(2, "little", signed=True)))
+    screen.set_clock(1000)
+    screen.loop(0)
+    assert glass() == [" 21.4", "--.-"], "at once — the glass had no number"
+
+    screen.rx(Frame(0x0A108502, bytes([2]) + (4550).to_bytes(2, "little")))
+    screen.set_clock(2000)
+    screen.loop(0)
+    assert glass() == [" 21.4", "--.-"] and pending(), "waits for the gap"
+
+    screen.set_clock(61000)
+    screen.loop(0)
+    assert glass() == [" 21.4", "45.5"] and not pending()
+    assert screen.display_refreshes == 3
+
+
+def test_a_display_without_segments_has_no_glass() -> None:
+    screen = SimDevice("display", UID)
+    assert [f.glass for f in screen.display_fields] == [None, None, None]
+    assert not screen.display_pending
 
 
 def test_a_sensor_holds_what_it_was_handed() -> None:

@@ -97,7 +97,7 @@ The C library is split by what a piece IS:
 | | `c/lagunbus/` | what |
 |---|---|---|
 | core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
-| `tools/` | `…/tools/debounce.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device) |
+| `tools/` | `…/tools/debounce.h`, `digits.h`, `epaper.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device; a number in segment places and the pacing of an e-paper serve any screen of that kind) |
 | `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h`, `…/types/sense.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
 Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
@@ -123,7 +123,8 @@ attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings)
 `panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
 `output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
 state), `out8` (as `devices/apps/out8`), `display` (three `Display` fields: a temperature,
-a text line, a humidity that can show text), `env` (as `devices/apps/env`: three `Sense`
+a text line, a humidity that can show text), `epd` (as `devices/apps/epd`: two `Display`
+fields, VALUE only, drawn in the e-paper's places and paced as its glass), `env` (as `devices/apps/env`: three `Sense`
 — a temperature, a humidity, a light — with `MIN_MAX`, `THRESHOLD` and `Offset`, values set
 by `lagun-sim`). `key` and `output` also come in 1 … 8 channels
 (`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
@@ -517,6 +518,29 @@ A measurement taken before the node has an address is not reported when the addr
 comes — the engine drops what was owed from before (TASK-01) — so a freshly joined sensor
 is first heard at its cycle, within `ReportInterval`. Pinned by `sense.json`,
 `sense_minmax.json`, `sense_threshold.json`, `sense_light.json`, `sense_restore.json`.
+
+### A screen's number and its refreshes are tools, the glass is the board's (2026-10-13)
+
+The first board with `Display` is an e-paper of segment digits (`devices/apps/epd`,
+`zadania/zrobione/DEVICE-04.md`). Two things it decides are not hardware and are worth a
+test on a computer, so they are tools here (N12) — and the simulator's `epd` uses them,
+so `lagun-sim` shows what the glass would, not the raw number:
+
+- **`tools/digits.h` — the number in its places.** Rounded to the layout's decimals,
+  halves away from zero; a minus takes a whole place, a half digit shows only "1"; what
+  does not fit is dashes, and so is "absent" (`zadania/zrobione/FEAT-12.md`, N12). The answer
+  is characters, not segments: which segments light is the panel's driver's
+  (`devices/components/epd1in9`).
+- **`tools/epaper.h` — when to refresh, and how.** The first refresh is full and at once
+  (the glass still shows the picture from before the power went — FEAT-12 N13); none
+  while the picture equals the glass; at most one per `min_gap_ms`, **except while the
+  glass shows no number**, so a value after a start or an expiry is not a minute late;
+  a full one after `full_every` partial ones (DEVICE-04, N3).
+
+Rejected: all of it in the board's component — simpler, but not testable on a computer,
+against the rule that logic lives here and boards only touch hardware. The pacer knows
+nothing of the panel being busy: the board does not ask while it is (N10), and the
+simulator's refresh takes no time.
 
 ## The registry
 

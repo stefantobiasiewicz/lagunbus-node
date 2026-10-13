@@ -233,7 +233,28 @@ lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *a
     sim->display_channels[index] = (lbs_channel_t){.sim = sim, .index = index};
     ep->ctx = &sim->display_channels[index];
     sim->own_timeout[index] = own_timeout_s;
+    /* The field knows its endpoint from now on, not only after `lb_display_init`: a view
+     * lists the fields before the start (`lagun-sim --headless`), and every accessor
+     * below goes through it. The rows are already copied, so before the start the field
+     * reads as empty — `Content` NONE, no value, no text — which it is. */
+    sim->displays[index].endpoint = ep;
     return ep;
+}
+
+void lbs_epaper(lbs_t *sim, uint32_t min_gap_ms, uint8_t full_every)
+{
+    sim->epaper = true;
+    lb_epaper_init(&sim->pacer, min_gap_ms, full_every);
+}
+
+void lbs_display_digits(lbs_t *sim, const lb_endpoint_t *field, const lb_digits_t *layout)
+{
+    if (field == NULL || lb_digits_width(layout) == 0) {
+        return;
+    }
+    const lbs_channel_t *ch = field->ctx;
+    sim->segmented[ch->index] = true;
+    sim->digits[ch->index] = *layout;
 }
 
 lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, uint16_t features,
@@ -377,6 +398,51 @@ int lbs_store_slots(void) { return LBS_SLOTS; }
 
 uint32_t lbs_store_version(const lbs_t *sim) { return sim->store_version; }
 
+/** What field `n` would draw now; true when that is a number rather than dashes. */
+static bool s_picture(const lbs_t *sim, uint8_t n, char *out)
+{
+    const lb_display_t *d = &sim->displays[n];
+    lb_value_t value = lb_display_content(d) == LB_DSP_SHOWS_VALUE ? lb_display_value(d)
+                                                                   : LB_ABSENT;
+    /* 2: hundredths, the scale of every quantity a field shows today (values.h). */
+    return lb_digits_format(&sim->digits[n], value, 2, out);
+}
+
+/** Whether the picture differs from the glass, and whether it has a number. */
+static bool s_differs(const lbs_t *sim, bool *content)
+{
+    bool differs = false;
+    *content = false;
+    for (uint8_t n = 0; n < sim->display_count; n++) {
+        if (!sim->segmented[n]) {
+            continue;
+        }
+        char picture[LB_DIGITS_MAX + 1];
+        *content |= s_picture(sim, n, picture);
+        differs |= strcmp(picture, sim->glass[n]) != 0;
+    }
+    return differs;
+}
+
+/** The board's loop, the screen's part: ask the pacer, and refresh the glass if it says. */
+static void s_epaper_tick(lbs_t *sim)
+{
+    bool content = false;
+    bool differs = s_differs(sim, &content);
+    lb_epaper_kind_t kind = lb_epaper_due(&sim->pacer, sim->clock, differs);
+    if (kind == LB_EPAPER_NONE) {
+        return;
+    }
+    for (uint8_t n = 0; n < sim->display_count; n++) {
+        if (sim->segmented[n]) {
+            s_picture(sim, n, sim->glass[n]);
+        }
+    }
+    lb_epaper_started(&sim->pacer, sim->clock, kind, content);
+    sim->refreshes++;
+    sim->drawn++;
+}
+
 void lbs_start(lbs_t *sim, uint32_t pins)
 {
     lb_node_start(&sim->node);
@@ -426,6 +492,9 @@ void lbs_loop(lbs_t *sim, uint32_t pins)
         } else if (sim->role[i] == LBS_DISPLAY) {
             lb_display_tick(&sim->displays[n], sim->clock);
         }
+    }
+    if (sim->epaper) {
+        s_epaper_tick(sim);
     }
 }
 
@@ -539,6 +608,30 @@ int lbs_display_text(const lbs_t *sim, int field, char *out, int cap)
 }
 
 uint32_t lbs_display_drawn(const lbs_t *sim) { return sim->drawn; }
+
+int lbs_display_glass(const lbs_t *sim, int field, char *out, int cap)
+{
+    if (field < 0 || field >= sim->display_count || !sim->segmented[field] || cap < 0) {
+        return -1;
+    }
+    int len = (int)strlen(sim->glass[field]);
+    int n = len < cap ? len : cap;
+    memcpy(out, sim->glass[field], (size_t)n);
+    return n;
+}
+
+bool lbs_display_pending(const lbs_t *sim)
+{
+    /* Before the first refresh there is no glass to lag behind — the clear comes at the
+     * first turn of the loop. */
+    if (!sim->epaper || !sim->pacer.started) {
+        return false;
+    }
+    bool content;
+    return s_differs(sim, &content);
+}
+
+uint32_t lbs_display_refreshes(const lbs_t *sim) { return sim->refreshes; }
 
 int lbs_sense_count(const lbs_t *sim) { return sim->sense_count; }
 

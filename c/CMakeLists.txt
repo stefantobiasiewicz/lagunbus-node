@@ -22,6 +22,8 @@ set(LAGUNBUS_SOURCES
     lagunbus/src/endpoint.c
     lagunbus/src/node.c
     lagunbus/src/tools/debounce.c
+    lagunbus/src/tools/digits.c
+    lagunbus/src/tools/epaper.c
     lagunbus/src/tools/led.c
     lagunbus/src/tools/service.c
     lagunbus/src/types/display.c
@@ -52,7 +54,7 @@ target_link_libraries(lagunbus_posix PUBLIC lagunbus)
 
 enable_testing()
 
-foreach(name frame values interfaces node key output led service)
+foreach(name frame values interfaces node key output led service digits epaper)
     add_executable(test_${name} tests/test_${name}.c)
     target_link_libraries(test_${name} lagunbus_posix)
     target_include_directories(test_${name} PRIVATE tests)
