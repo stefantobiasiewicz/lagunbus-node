@@ -677,6 +677,9 @@ static uint8_t device_read(lb_node_t *node, uint8_t element,
     case LB_DEV_LAST_RESET:
         *len = lb_encode(LB_T_ENUM8, LB_NUM(node->reset_reason), out, cap);
         break;
+    case LB_DEV_ADDRESS:
+        *len = lb_encode(LB_T_U16, LB_NUM(node->address), out, cap);
+        break;
     default:
         return LB_RESULT_UNSUPPORTED_ELEMENT;
     }
@@ -780,6 +783,41 @@ static uint8_t system_read(lb_node_t *node, uint8_t endpoint, uint8_t element,
     return groups_read(node, element, out, cap, len);
 }
 
+/** A write of `Device.Address` — re-addressing (06-cykl-zycia-urzadzenia.md §4.2).
+ *
+ * The new address goes to the store FIRST and only then is the write acknowledged
+ * (COMPLIANCE.md LB-NODE-027, -028): if the reply is lost, the hub finds the node under
+ * the new address, never under neither. The switch itself waits for the reply, which
+ * still leaves from the old address — `handle_frame` takes `readdress_to` after it.
+ *
+ * Only node addresses, 0x001–0x7FD (03-adresacja.md §2). 0x000 is refused although it is
+ * a valid `u16`: forgetting the address is what `FactoryReset` does, with the restart that
+ * goes with it, and a node left without an address by a write would be one the hub just
+ * lost. 0x7FE is the hub, 0x7FF broadcast. The address the node already has is `OK` and
+ * touches nothing.
+ *
+ * Missing from the C library until 2026-10-13 — a read was `UNSUPPORTED_ELEMENT`, a write
+ * `READ_ONLY`, and the hub could not move a node (vectors/scenarios/address.json). */
+static uint8_t readdress(lb_node_t *node, const uint8_t *data, uint8_t len)
+{
+    lb_value_t v;
+    if (!lb_decode(LB_T_U16, data, len, &v) || v.absent
+        || v.value < (int32_t)LB_ADDRESS_NODE_MIN || v.value > (int32_t)LB_ADDRESS_NODE_MAX) {
+        return LB_RESULT_INVALID_VALUE;
+    }
+    uint16_t fresh = (uint16_t)v.value;
+    if (fresh == node->address) {
+        return LB_RESULT_OK;
+    }
+    if (node->platform->store == NULL
+        || !node->platform->store(node->platform->ctx, NVS_KEY_ADDRESS, &fresh,
+                                  sizeof fresh)) {
+        return LB_RESULT_FAILURE; /* not stored, not taken — never `OK` (LB-NODE-028) */
+    }
+    node->readdress_to = fresh;
+    return LB_RESULT_OK;
+}
+
 static uint8_t system_write(lb_node_t *node, uint8_t endpoint, uint8_t element,
                             const uint8_t *data, uint8_t len)
 {
@@ -789,8 +827,11 @@ static uint8_t system_write(lb_node_t *node, uint8_t endpoint, uint8_t element,
     if (element >= LB_COMMON_BASE) {
         return lb_endpoint_write(&node->system[endpoint], element, data, len);
     }
-    /* The only setting of the system types themselves. The rest are counters and
-     * description — those are read. `Device` describes the device and has none. */
+    if (endpoint == LB_EP_DEVICE && element == LB_DEV_ADDRESS) {
+        return readdress(node, data, len);
+    }
+    /* The only setting of the system types themselves besides `Address`. The rest are
+     * counters and description — those are read. */
     if (endpoint != LB_EP_DIAGNOSTICS || element != LB_DIAG_ERROR_THRESHOLD) {
         return LB_RESULT_READ_ONLY;
     }
@@ -1192,6 +1233,13 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
     }
 
     respond(node, &f, tid, result, data, len);
+
+    /* Re-addressing: the reply above left from the old address, everything from here on
+     * leaves from the new one. */
+    if (node->readdress_to != LB_ADDRESS_UNASSIGNED) {
+        node->address = node->readdress_to;
+        node->readdress_to = LB_ADDRESS_UNASSIGNED;
+    }
 
     /* SEGMENTED is an ANNOUNCEMENT, not a result: the hub keeps waiting on the same
      * transaction, and the value arrives in separate frames right after it. */

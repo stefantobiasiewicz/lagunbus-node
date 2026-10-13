@@ -1,0 +1,20 @@
+{
+  "about": "Device.Address (types/0x0001-device.md §2.5; 06-cykl-zycia-urzadzenia.md §4.2): readable, and writable to re-address the node — the new address goes to the store BEFORE the reply, the reply still leaves from the OLD address, everything after it from the new one. Only node addresses 0x001-0x7FD: 0x000 is forgetting the address, which is FactoryReset's job, 0x7FE is the hub and 0x7FF broadcast. Writing the address the node already has changes nothing. Missing from the C library until 2026-10-13: a read was UNSUPPORTED_ELEMENT and a write READ_ONLY.",
+  "profile": "output",
+  "uid": "A1B2C3D400010203",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "read Address", "rx": ["0C108020#01"], "expect": ["0E108020#014200"]},
+    {"at": 200, "note": "Address = 0x043: stored first, answered from the old address", "rx": ["0A108020#024300"], "expect": ["0E108020#02"], "store": {"address": "4300"}},
+    {"at": 210, "note": "the old address is not ours any more", "rx": ["0C108020#03"]},
+    {"at": 220, "note": "the new one is", "rx": ["0C10C020#03"], "expect": ["0E10C020#034300"]},
+    {"at": 230, "note": "0x000 is not a node address", "rx": ["0A10C020#040000"], "expect": ["0E10C020#34"], "store": {"address": "4300"}},
+    {"at": 240, "note": "0x7FE is the hub", "rx": ["0A10C020#05FE07"], "expect": ["0E10C020#35"]},
+    {"at": 250, "note": "nor above 11 bits", "rx": ["0A10C020#060008"], "expect": ["0E10C020#36"]},
+    {"at": 260, "note": "the same address: OK, nothing changes", "rx": ["0A10C020#074300"], "expect": ["0E10C020#07"], "store": {"address": "4300"}},
+    {"at": 300, "note": "reports and replies go out from the new address", "rx": ["0610C402#00"], "expect": ["1010C400#01", "0E10C402#00"], "driven": 1}
+  ]
+}

@@ -41,6 +41,7 @@ extern "C" {
 #define LB_DEV_UPTIME            0x10u
 #define LB_DEV_BOOT_COUNT        0x11u
 #define LB_DEV_LAST_RESET        0x12u
+#define LB_DEV_ADDRESS           0x20u
 #define LB_DEV_EVENT_BOOTED      0x01u
 
 /* `Device` commands (types/0x0001-device.md §3). */
@@ -193,6 +194,9 @@ typedef struct {
     uint8_t         endpoint_count;
 
     uint16_t address;
+    /** A write of `Device.Address` accepted and stored, not yet taken: the reply still
+     * leaves from the old address (06-cykl-zycia-urzadzenia.md §4.2). 0 = none. */
+    uint16_t readdress_to;
     uint8_t  reset_reason;
     uint16_t boot_count;
 
