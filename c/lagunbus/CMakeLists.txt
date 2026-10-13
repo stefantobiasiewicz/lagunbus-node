@@ -7,6 +7,6 @@
 idf_component_register(
     SRCS "src/frame.c" "src/values.c" "src/endpoint.c" "src/node.c"
          "src/tools/debounce.c" "src/tools/led.c" "src/tools/service.c"
-         "src/types/display.c" "src/types/key.c" "src/types/output.c"
+         "src/types/display.c" "src/types/key.c" "src/types/output.c" "src/types/sense.c"
     INCLUDE_DIRS "include"
 )

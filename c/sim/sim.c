@@ -236,6 +236,24 @@ lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *a
     return ep;
 }
 
+lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, const lb_attr_t *attrs,
+                             uint8_t count)
+{
+    uint8_t index = sim->sense_count;
+    lb_endpoint_t *ep = s_next(sim, LB_TYPE_SENSE, attrs, count, LBS_SENSE, index);
+    if (ep == NULL) {
+        return NULL;
+    }
+    sim->sense_count++;
+    ep->channel = 0;
+    lb_sense_defaults(ep, quantity);
+    /* The endpoint now, not at `lb_sense_init`: Python may list the sensors before the
+     * start (`lagun-sim --headless` does), and a NULL there is a crash, not an empty list. */
+    sim->senses[index].endpoint = ep;
+    sim->senses[index].node = &sim->node;
+    return ep;
+}
+
 static bool s_pressed(const lbs_t *sim, uint32_t pins, uint8_t input)
 {
     bool level = (pins >> input) & 1u;
@@ -298,11 +316,12 @@ lbs_t *lbs_create(const char *name, const uint8_t *uid, uint32_t jitter, uint8_t
         sim->channels[i] = (lbs_channel_t){.sim = sim, .index = i};
     }
     sim->key_config = (lb_key_config_t)LB_KEY_CONFIG_DEFAULT;
+    sim->node_class = LB_CLASS_CONTROL;
 
     device->define(sim, channels);
 
     lb_identity_t identity = {
-        .node_class = LB_CLASS_CONTROL, .device_type = sim->device_type,
+        .node_class = sim->node_class, .device_type = sim->device_type,
         .firmware = 0x00000100, .hardware = 1, .protocol = 1,
     };
     memcpy(identity.uid, uid, LB_UID_LEN);
@@ -372,6 +391,8 @@ void lbs_start(lbs_t *sim, uint32_t pins)
         } else if (sim->role[i] == LBS_DISPLAY) {
             lb_display_init(&sim->displays[n], &sim->node, &sim->endpoints[i],
                             sim->own_timeout[n], s_drawn, sim);
+        } else if (sim->role[i] == LBS_SENSE) {
+            lb_sense_init(&sim->senses[n], &sim->node, &sim->endpoints[i]);
         }
     }
 }
@@ -516,6 +537,52 @@ int lbs_display_text(const lbs_t *sim, int field, char *out, int cap)
 }
 
 uint32_t lbs_display_drawn(const lbs_t *sim) { return sim->drawn; }
+
+int lbs_sense_count(const lbs_t *sim) { return sim->sense_count; }
+
+static lb_sense_t *s_sensor(lbs_t *sim, int sensor)
+{
+    return sensor >= 0 && sensor < sim->sense_count ? &sim->senses[sensor] : NULL;
+}
+
+int lbs_sense_endpoint(const lbs_t *sim, int sensor)
+{
+    const lb_sense_t *s = s_sensor((lbs_t *)sim, sensor);
+    return s == NULL ? -1 : s->endpoint->number;
+}
+
+int lbs_sense_quantity(const lbs_t *sim, int sensor)
+{
+    const lb_sense_t *s = s_sensor((lbs_t *)sim, sensor);
+    return s == NULL ? -1 : lb_sense_quantity(s);
+}
+
+bool lbs_sense_value(const lbs_t *sim, int sensor, int32_t *value)
+{
+    const lb_sense_t *s = s_sensor((lbs_t *)sim, sensor);
+    if (s == NULL) {
+        return false;
+    }
+    lb_value_t v = lb_sense_value(s);
+    *value = v.value;
+    return !v.absent;
+}
+
+void lbs_sense_update(lbs_t *sim, int sensor, int32_t raw)
+{
+    lb_sense_t *s = s_sensor(sim, sensor);
+    if (s != NULL) {
+        lb_sense_update(s, raw);
+    }
+}
+
+void lbs_sense_fail(lbs_t *sim, int sensor)
+{
+    lb_sense_t *s = s_sensor(sim, sensor);
+    if (s != NULL) {
+        lb_sense_fail(s);
+    }
+}
 
 void lbs_service_press(lbs_t *sim) { lb_node_factory_reset(&sim->node); }
 

@@ -98,7 +98,7 @@ The C library is split by what a piece IS:
 |---|---|---|
 | core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
 | `tools/` | `…/tools/debounce.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device) |
-| `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
+| `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h`, `…/types/sense.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
 Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
 owns to `tools/` (`zadania/zrobione/CR-01.md`, step 6).
@@ -123,7 +123,8 @@ attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings)
 `panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
 `output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
 state), `out8` (as `devices/apps/out8`), `display` (three `Display` fields: a temperature,
-a text line, a humidity that can show text). `key` and `output` also come in 1 … 8 channels
+a text line, a humidity that can show text), `env` (two `Sense`: a temperature and a
+humidity, values set by `lagun-sim`). `key` and `output` also come in 1 … 8 channels
 (`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
 one, the board they copy, is the default. Each step sets the clock, hands the node frames,
 sets the input pins (`pin` — one level, or a list for several inputs), and runs one turn
@@ -475,6 +476,21 @@ and the common settings `INVALID_VALUE`.
 Pinned by `vectors/scenarios/long_write.json` (the mechanics, on `output`) and
 `display.json`.
 
+### `Sense`: the core only, defaults from the quantity
+
+`types/sense.h` has `Value` and `Quantity` and no features (zadania/zrobione/FEAT-13.md):
+`MIN_MAX`, `THRESHOLD` and `Offset` come with the board that needs them (DEVICE-01). The
+application hands in what it read — `lb_sense_update`, `lb_sense_fail` — and the
+reporting engine decides when it goes out; the type only marks `Value` as reported with
+hysteresis and types it by `Quantity`, as `Display` does. **The defaults of §5.3 are set
+by `lb_sense_defaults` into `.common` before `lb_node_start()`**, so stored settings win
+and a factory reset brings them back. The table is hand-copied from
+`registry/quantities.yaml`; `ILLUMINANCE` is left at "any change" until DEVICE-01 N2
+decides its relative rule. A measurement taken before the node has an address is not
+reported when the address comes — the engine drops what was owed from before (TASK-01)
+— so a freshly joined sensor is first heard at its cycle, within `ReportInterval`.
+Pinned by `sense.json`.
+
 ## The registry
 
 ```sh
@@ -488,7 +504,7 @@ still carries Polish names, and the generator holds the translation table. It mu
 the one in `hub/tools/generate_registry.py`, and an unknown name fails on purpose.
 
 The endpoint catalogue (`types/*.md`) is prose, so attribute numbers are hand-copied in
-`types/key.h`, `types/output.h` and `types/display.h`. A type change means those, plus a
+`types/key.h`, `types/output.h`, `types/display.h` and `types/sense.h`. A type change means those, plus a
 scenario. So are the quantities (`lb_quantity_type` in `values.c`, from
 `registry/quantities.yaml`, which the generator does not read): `vectors/codec.json`
 § quantities pins every row.
@@ -515,8 +531,8 @@ tells, so on SocketCAN over a plain socket (`lagun-node`) and in the simulator w
 
 **Queries:** `QueryEnabled` is stored, but the node never sends a QUERY. `Display` is the
 first type with an input (`Value`, types/0x0022-display.md §4a); without an answer a field
-shows `NONE`, which the type allows. The hub has no source to answer from until
-zadania/FEAT-13.md either.
+shows `NONE`, which the type allows. The hub does not answer queries either — left to
+the bindings epic (zadania/zrobione/FEAT-13.md N10).
 
 **Strings in the store:** `lb_node_persist` encodes scalars only; a persistent `string`
 attribute would not be stored. None exists (`Display.Text` is `V`).

@@ -27,6 +27,7 @@ set(LAGUNBUS_SOURCES
     lagunbus/src/types/display.c
     lagunbus/src/types/key.c
     lagunbus/src/types/output.c
+    lagunbus/src/types/sense.c
 )
 
 add_library(lagunbus STATIC ${LAGUNBUS_SOURCES})

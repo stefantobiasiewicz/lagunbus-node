@@ -1,0 +1,27 @@
+{
+  "about": "Sense without features (types/0x0030-sense.md; zadania/zrobione/FEAT-13.md): profile env, ep4 TEMPERATURE (i16, 0.01 °C), ep5 HUMIDITY (u16, 0.01 %). Value is absent until the first measurement and not reported before it (§5.5); a measurement goes out at once; a change below the quantity's default hysteresis — 0.20 °C, 1.00 % — stays quiet, one at it is reported against the last REPORTED value (§5.3); the cycle of 60 s carries the value unchanged; a failed reading is reported as absent and the next good one is a change (§5.2). The defaults are readable as the common ReportHysteresis and ReportInterval. A measurement step is `sense`: endpoint → raw value, null for a failed reading.",
+  "profile": "env",
+  "uid": "A1B2C3D400030405",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "before any measurement Value is absent", "rx": ["0C108400#01"], "expect": ["0E108400#010080"]},
+    {"at": 200, "note": "and nothing is reported"},
+    {"at": 300, "note": "Quantity of ep5", "rx": ["0C108501#02"], "expect": ["0E108501#0201"]},
+    {"at": 400, "note": "the default hysteresis of a temperature: 0.20 °C", "rx": ["0C1084FA#03"], "expect": ["0E1084FA#031400"]},
+    {"at": 500, "note": "of a humidity: 1.00 %", "rx": ["0C1085FA#04"], "expect": ["0E1085FA#046400"]},
+    {"at": 600, "note": "the cycle: 60 s", "rx": ["0C1084F8#05"], "expect": ["0E1084F8#053C00"]},
+    {"at": 1000, "note": "the first measurement: 21.50 °C and 45.00 %, out at once", "sense": {"4": 2150, "5": 4500}, "expect": ["10108400#6608", "10108500#9411"]},
+    {"at": 2000, "note": "+0.15 °C: below the hysteresis", "sense": {"4": 2165}},
+    {"at": 3000, "note": "+0.20 °C against the last REPORTED value", "sense": {"4": 2170}, "expect": ["10108400#7A08"]},
+    {"at": 4000, "note": "+0.90 %: below the hysteresis", "sense": {"5": 4590}},
+    {"at": 5000, "note": "+1.00 %", "sense": {"5": 4600}, "expect": ["10108500#F811"]},
+    {"at": 59999},
+    {"at": 60000, "note": "the cycle carries the values unchanged", "expect": ["10108400#7A08", "10108500#F811"]},
+    {"at": 61000, "note": "the sensor fails: absent, reported", "sense": {"4": null}, "expect": ["10108400#0080"]},
+    {"at": 61100, "note": "and read as absent", "rx": ["0C108400#06"], "expect": ["0E108400#060080"]},
+    {"at": 62000, "note": "back: a value after absent is a change", "sense": {"4": 2170}, "expect": ["10108400#7A08"]}
+  ]
+}

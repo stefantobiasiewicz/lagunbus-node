@@ -141,6 +141,12 @@ def load() -> ctypes.CDLL:
     sig("lbs_display_value", b, ptr, i32, ctypes.POINTER(i32))
     sig("lbs_display_text", i32, ptr, i32, text, i32)
     sig("lbs_display_drawn", u32, ptr)
+    sig("lbs_sense_count", i32, ptr)
+    sig("lbs_sense_endpoint", i32, ptr, i32)
+    sig("lbs_sense_quantity", i32, ptr, i32)
+    sig("lbs_sense_value", b, ptr, i32, ctypes.POINTER(i32))
+    sig("lbs_sense_update", None, ptr, i32, i32)
+    sig("lbs_sense_fail", None, ptr, i32)
     return lib
 
 
@@ -159,6 +165,17 @@ class DisplayField(NamedTuple):
     value: int | None
     """The raw number, `None` when there is none to show."""
     text: str
+
+
+class Sensor(NamedTuple):
+    """One `Sense` endpoint (types/0x0030-sense.md) — what it measures and what it holds."""
+
+    endpoint: int
+    quantity: int
+    """`Quantity`; the scale and unit are the viewer's (`registry/quantities.yaml`)."""
+    value: int | None
+    """The raw `Value`, `None` while absent — before the first measurement or after a
+    failed one."""
 
 
 class DeviceInfo(NamedTuple):
@@ -364,6 +381,35 @@ class SimDevice:
                 )
             )
         return fields
+
+    # --- sensors (types/0x0030-sense.md) -----------------------------------------------
+
+    @property
+    def sensors(self) -> list[Sensor]:
+        out = []
+        for i in range(self.lib.lbs_sense_count(self._h)):
+            raw = ctypes.c_int32()
+            has_value = bool(self.lib.lbs_sense_value(self._h, i, ctypes.byref(raw)))
+            out.append(
+                Sensor(
+                    endpoint=int(self.lib.lbs_sense_endpoint(self._h, i)),
+                    quantity=int(self.lib.lbs_sense_quantity(self._h, i)),
+                    value=int(raw.value) if has_value else None,
+                )
+            )
+        return out
+
+    def sense(self, endpoint: int, raw: int | None) -> None:
+        """A measurement on the sensor at `endpoint`, in the quantity's units on the wire;
+        `None` is a failed reading. A report goes out when the change is worth one."""
+        for i, sensor in enumerate(self.sensors):
+            if sensor.endpoint == endpoint:
+                if raw is None:
+                    self.lib.lbs_sense_fail(self._h, i)
+                else:
+                    self.lib.lbs_sense_update(self._h, i, raw)
+                return
+        raise ValueError(f"no sensor at ep{endpoint}")
 
     @property
     def drawn(self) -> int:

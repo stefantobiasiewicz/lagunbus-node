@@ -15,6 +15,10 @@ port's `health` answers from then on — `active`, `warning`, `passive`, `off`. 
 `health` answers from then on, `service: true` presses the service button before the
 turn, and `state` is the state the node last REPORTED to its state watch —
 `on_start_state` the same after the start.
+
+A measurement (types/0x0030-sense.md): `sense` in a step maps an endpoint number to the
+raw value its sensor read, `null` for a failed reading — handed in before the turn, as a
+board's application does after reading its sensor.
 """
 
 from __future__ import annotations
@@ -112,6 +116,8 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             node.set_errors(*step["errors"])
         if step.get("service", False):
             node.service_press()
+        for endpoint, raw in step.get("sense", {}).items():
+            node.sense(int(endpoint), raw)
         node.loop(pins)
         check(where, node.take_tx(), step.get("expect", []))
 

@@ -25,6 +25,7 @@ def test_the_catalogue_lists_every_device_with_a_description() -> None:
         "output8",
         "out8",
         "display",
+        "env",
     ]
     assert all(d.about for d in devices())
 
@@ -106,3 +107,26 @@ def test_display_fields_show_what_was_written() -> None:
     assert (fields[0].content, fields[0].value) == ("VALUE", 2137)
     assert (fields[1].content, fields[1].text) == ("TEXT", "żółw")
     assert screen.drawn == drawn + 2
+
+
+def test_a_sensor_holds_what_it_was_handed() -> None:
+    """`sense` is what `lagun-sim` calls from its keys; `None` is a failed reading.
+    What goes onto the bus is `vectors/scenarios/sense.json`'s."""
+    env = SimDevice("env", UID)
+    env.store_put("address", bytes.fromhex("4200"))
+    env.start(0)
+    assert env.sensors == [(4, 0, None), (5, 1, None)], "absent before any measurement"
+    env.sense(4, 2150)
+    env.sense(5, 4500)
+    assert [s.value for s in env.sensors] == [2150, 4500]
+    env.sense(4, None)
+    assert env.sensors[0].value is None
+    with pytest.raises(ValueError, match="ep6"):
+        env.sense(6, 1)
+
+
+def test_sensors_can_be_listed_before_the_start() -> None:
+    """`lagun-sim --headless` prints them before it powers the node on — the endpoint has
+    to be there from the device's definition, not from `lb_sense_init`."""
+    env = SimDevice("env", UID)
+    assert [(s.endpoint, s.quantity) for s in env.sensors] == [(4, 0), (5, 1)]

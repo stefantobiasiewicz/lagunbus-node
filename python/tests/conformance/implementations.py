@@ -97,6 +97,7 @@ class Device(Protocol):
     def set_bus(self, state: str) -> None: ...
     def set_errors(self, tec: int, rec: int) -> None: ...
     def set_reset_reason(self, reason: str) -> None: ...
+    def sense(self, endpoint: int, raw: int | None) -> None: ...
 
 
 # --- Python -------------------------------------------------------------------------
@@ -322,3 +323,6 @@ class CDevice:
 
     def set_reset_reason(self, reason: str) -> None:
         self.device.set_reset_reason(sim.RESET_REASONS[reason])
+
+    def sense(self, endpoint: int, raw: int | None) -> None:
+        self.device.sense(endpoint, raw)

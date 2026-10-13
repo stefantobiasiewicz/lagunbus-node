@@ -12,7 +12,7 @@
  *
  * Adding a device: a function below and a line in `lbs_devices`. Nothing else — the
  * endpoint numbers (4, 5, …), channels and hooks come from `lbs_add_key` /
- * `lbs_add_output`.
+ * `lbs_add_output` / `lbs_add_display` / `lbs_add_sense`.
  */
 #include "sim.h"
 
@@ -228,6 +228,31 @@ static void display(lbs_t *sim, uint8_t channels)
     lbs_add_display(sim, LB_DSP_F_VALUE | LB_DSP_F_TEXT, humidity, LBS_COUNT(humidity), 0);
 }
 
+/* --- sensors ------------------------------------------------------------------------ */
+
+/** A room sensor: a temperature on ep4 and a humidity on ep5, both without features — the
+ * core of `Sense` the library has (zadania/zrobione/FEAT-13.md), reporting with the quantities'
+ * defaults: 0.20 °C and 1.00 %, every 60 s. What it measures `lagun-sim` sets by hand.
+ * A sensor, so it joins from the sensor address block. `DeviceType` 0x0030 is the one
+ * DEVICE-01 N9 proposes for the board `env`; this is that board minus light and
+ * features. */
+static void env(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t temperature[] = {
+        LB_SNS_ATTR_VALUE(),
+        LB_SNS_ATTR_QUANTITY(LB_QUANTITY_TEMPERATURE),
+    };
+    static const lb_attr_t humidity[] = {
+        LB_SNS_ATTR_VALUE(),
+        LB_SNS_ATTR_QUANTITY(LB_QUANTITY_HUMIDITY),
+    };
+    sim->device_type = 0x0030;
+    sim->node_class = LB_CLASS_SENSOR;
+    lbs_add_sense(sim, LB_QUANTITY_TEMPERATURE, temperature, LBS_COUNT(temperature));
+    lbs_add_sense(sim, LB_QUANTITY_HUMIDITY, humidity, LBS_COUNT(humidity));
+}
+
 /* --- the catalogue ------------------------------------------------------------------ */
 
 const lbs_device_t lbs_devices[] = {
@@ -241,6 +266,7 @@ const lbs_device_t lbs_devices[] = {
     {"output8",   "eight relays that remember their state",                  output8,   0},
     {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
     {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
+    {"env",       "a room sensor: temperature and humidity",                 env,       0},
 };
 
 const size_t lbs_device_total = sizeof lbs_devices / sizeof lbs_devices[0];

@@ -25,6 +25,7 @@
 #include "lagunbus/types/display.h"
 #include "lagunbus/types/key.h"
 #include "lagunbus/types/output.h"
+#include "lagunbus/types/sense.h"
 
 #include <stddef.h>
 
@@ -39,7 +40,7 @@
 
 typedef struct lbs lbs_t;
 
-typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT, LBS_DISPLAY } lbs_role_t;
+typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT, LBS_DISPLAY, LBS_SENSE } lbs_role_t;
 
 /** What an output's callbacks get as `ctx`: the device and WHICH output. */
 typedef struct {
@@ -89,6 +90,13 @@ struct lbs {
     lbs_channel_t display_channels[LBS_ENDPOINTS];
     uint16_t      own_timeout[LBS_ENDPOINTS];
     uint32_t      drawn;
+
+    /* Sensors (types/0x0030-sense.md). What they measure comes from Python —
+     * `lbs_sense_update` — as a board's application hands in what it read. */
+    uint8_t    sense_count;
+    lb_sense_t senses[LBS_ENDPOINTS];
+
+    uint8_t node_class; /**< `LB_CLASS_CONTROL` unless the device says otherwise */
 
     uint32_t clock;
     uint32_t jitter;
@@ -148,6 +156,12 @@ lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
 lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
                                uint8_t count, uint16_t own_timeout_s);
 
+/** Add a sensor of `quantity`, the same way, with channel 0 — it measures the room, not
+ * a channel (§5.6) — and the quantity's reporting defaults (§5.3). `attrs` must hold
+ * `Value` and `Quantity`. Returns the endpoint or NULL. */
+lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, const lb_attr_t *attrs,
+                             uint8_t count);
+
 /* --- the API for Python ------------------------------------------------------------- */
 
 size_t      lbs_device_count(void);
@@ -204,6 +218,16 @@ int      lbs_display_quantity(const lbs_t *sim, int field);
 bool     lbs_display_value(const lbs_t *sim, int field, int32_t *value);
 int      lbs_display_text(const lbs_t *sim, int field, char *out, int cap);
 uint32_t lbs_display_drawn(const lbs_t *sim);
+
+/** Sensors, by index: how many, which endpoint, `Quantity`, and the current `Value`
+ * (false when absent). `update` hands in a measurement, `fail` a failed reading — what a
+ * board's application does after reading its sensor. */
+int  lbs_sense_count(const lbs_t *sim);
+int  lbs_sense_endpoint(const lbs_t *sim, int sensor);
+int  lbs_sense_quantity(const lbs_t *sim, int sensor);
+bool lbs_sense_value(const lbs_t *sim, int sensor, int32_t *value);
+void lbs_sense_update(lbs_t *sim, int sensor, int32_t raw);
+void lbs_sense_fail(lbs_t *sim, int sensor);
 
 /** The service button: `lb_node_factory_reset()`, as a board calls it after the hold. */
 void lbs_service_press(lbs_t *sim);
