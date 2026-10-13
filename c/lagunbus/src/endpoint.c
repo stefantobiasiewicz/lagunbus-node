@@ -311,7 +311,10 @@ static bool changed(const lb_endpoint_t *endpoint, const lb_attr_t *attr,
         return true;
     }
     int64_t magnitude = diff < 0 ? -diff : diff;
-    return magnitude >= (int64_t)endpoint->common.report_hysteresis;
+    uint32_t hysteresis = endpoint->hysteresis != NULL
+                              ? endpoint->hysteresis(endpoint, attr->id, slot->reported)
+                              : endpoint->common.report_hysteresis;
+    return magnitude >= (int64_t)hysteresis;
 }
 
 bool lb_endpoint_set(lb_endpoint_t *endpoint, uint8_t element, lb_value_t value)

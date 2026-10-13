@@ -123,8 +123,9 @@ attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings)
 `panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
 `output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
 state), `out8` (as `devices/apps/out8`), `display` (three `Display` fields: a temperature,
-a text line, a humidity that can show text), `env` (two `Sense`: a temperature and a
-humidity, values set by `lagun-sim`). `key` and `output` also come in 1 … 8 channels
+a text line, a humidity that can show text), `env` (as `devices/apps/env`: three `Sense`
+— a temperature, a humidity, a light — with `MIN_MAX`, `THRESHOLD` and `Offset`, values set
+by `lagun-sim`). `key` and `output` also come in 1 … 8 channels
 (`max_channels` in the table, `channels` in a scenario — `key_x4.json`, `output_x3.json`);
 one, the board they copy, is the default. Each step sets the clock, hands the node frames,
 sets the input pins (`pin` — one level, or a list for several inputs), and runs one turn
@@ -476,20 +477,46 @@ and the common settings `INVALID_VALUE`.
 Pinned by `vectors/scenarios/long_write.json` (the mechanics, on `output`) and
 `display.json`.
 
-### `Sense`: the core only, defaults from the quantity
+### `Sense`: defaults from the quantity, the type's rules on the endpoint (2026-10-13)
 
-`types/sense.h` has `Value` and `Quantity` and no features (zadania/zrobione/FEAT-13.md):
-`MIN_MAX`, `THRESHOLD` and `Offset` come with the board that needs them (DEVICE-01). The
-application hands in what it read — `lb_sense_update`, `lb_sense_fail` — and the
-reporting engine decides when it goes out; the type only marks `Value` as reported with
-hysteresis and types it by `Quantity`, as `Display` does. **The defaults of §5.3 are set
-by `lb_sense_defaults` into `.common` before `lb_node_start()`**, so stored settings win
-and a factory reset brings them back. The table is hand-copied from
-`registry/quantities.yaml`; `ILLUMINANCE` is left at "any change" until DEVICE-01 N2
-decides its relative rule. A measurement taken before the node has an address is not
-reported when the address comes — the engine drops what was owed from before (TASK-01)
-— so a freshly joined sensor is first heard at its cycle, within `ReportInterval`.
-Pinned by `sense.json`.
+`types/sense.h` is the whole type: `Value` and `Quantity` (zadania/zrobione/FEAT-13.md),
+`MIN_MAX`, `THRESHOLD` and `Offset` (zadania/zrobione/DEVICE-01.md). The application hands
+in what it read — `lb_sense_update`, `lb_sense_fail` — and the reporting engine decides
+when it goes out. What was decided on the way:
+
+- **`lb_sense_defaults` runs before `lb_node_start()` and types every `⟨Q⟩` row.** The
+  node restores stored values at start, before the type's init, and a stored threshold is
+  two bytes for a temperature and four for light — an untyped row restores nothing. It
+  also sets the defaults of §5.3 into `.common`, so stored settings win and a factory
+  reset brings them back. The table is hand-copied from `registry/quantities.yaml`.
+- **Light's relative hysteresis is a hook on the endpoint** (`lb_hysteresis_fn`,
+  `endpoint.h`), not a rule in the engine: the engine knows no quantities and the type
+  does not hold the baseline. `Sense` lends it for `ILLUMINANCE` only: `ReportHysteresis`
+  is the floor (50 lx), 10 % of the last reported value above it, 0 still "any change"
+  (lagunbus-spec/DECYZJE.md, "Sense: histereza światła względna"). Rejected: a quantity
+  switch in `endpoint.c` — the engine would grow a type's rule for every type after it.
+- **The first good reading sets the zone without a `Threshold`.** No crossing happened,
+  and an event at every start would be the false alarm §5.5 forbids; a hub that needs
+  the zone at start compares `Value` with the thresholds itself. A failed reading keeps
+  the zone. Into a zone past the threshold (at it is not above it), out at the threshold
+  minus the hysteresis, at it included; a threshold written absent is inactive from the
+  next reading. The event goes out before the report of the same reading.
+- **A device without `ThresholdHysteresis` uses the quantity's report hysteresis**, and
+  the row's default is the same: the sensor's noise is one, whoever listens to it.
+- **`MinMeasured`/`MaxMeasured` are stored at most every 10 minutes, counted from the
+  start, and at once after `ResetMinMax`** (DEVICE-01 N10; types/0x0030-sense.md §5.7).
+  Checked at each reading — a board measures every second or two — so no tick is needed.
+  They are `RO,P`: a factory reset leaves them, as `PressCount`.
+- **`Offset` is added and the result held to the type's range**; a new `Offset` applies
+  from the next reading and recomputes no extremes (DEVICE-01 N11).
+- **`lb_sense_init` puts the type's hooks on the endpoint** — `on_command`, `on_check`,
+  `feature_of`, `hysteresis`, and `ctx` as the sense — unlike `Display`, whose hooks the
+  device wires: a sensor has no callback of the device's to carry.
+
+A measurement taken before the node has an address is not reported when the address
+comes — the engine drops what was owed from before (TASK-01) — so a freshly joined sensor
+is first heard at its cycle, within `ReportInterval`. Pinned by `sense.json`,
+`sense_minmax.json`, `sense_threshold.json`, `sense_light.json`, `sense_restore.json`.
 
 ## The registry
 

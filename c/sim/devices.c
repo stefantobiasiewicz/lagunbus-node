@@ -230,27 +230,35 @@ static void display(lbs_t *sim, uint8_t channels)
 
 /* --- sensors ------------------------------------------------------------------------ */
 
-/** A room sensor: a temperature on ep4 and a humidity on ep5, both without features — the
- * core of `Sense` the library has (zadania/zrobione/FEAT-13.md), reporting with the quantities'
- * defaults: 0.20 °C and 1.00 %, every 60 s. What it measures `lagun-sim` sets by hand.
- * A sensor, so it joins from the sensor address block. `DeviceType` 0x0030 is the one
- * DEVICE-01 N9 proposes for the board `env`; this is that board minus light and
- * features. */
+/** The board `env` (devices/apps/env, zadania/zrobione/DEVICE-01.md): a temperature on
+ * ep4, a humidity on ep5, a light on ep6 — SHT40 and VEML7700 — each with `MIN_MAX`,
+ * `THRESHOLD` and `Offset`, reporting with the quantities' defaults: 0.20 °C, 1.00 %,
+ * 50 lx or 10 %, every 60 s. What it measures `lagun-sim` sets by hand. A sensor, so it
+ * joins from the sensor address block; `DeviceType` 0x0030 (DEVICE-01 N9). */
+#define ENV_ROWS(quantity)                     \
+    {                                          \
+        LB_SNS_ATTR_VALUE(),                   \
+        LB_SNS_ATTR_QUANTITY(quantity),        \
+        LB_SNS_ATTR_MIN_MEASURED(),            \
+        LB_SNS_ATTR_MAX_MEASURED(),            \
+        LB_SNS_ATTR_OFFSET(),                  \
+        LB_SNS_ATTR_THRESHOLD_LOW(),           \
+        LB_SNS_ATTR_THRESHOLD_HIGH(),          \
+        LB_SNS_ATTR_THRESHOLD_HYSTERESIS(),    \
+    }
+
 static void env(lbs_t *sim, uint8_t channels)
 {
     (void)channels;
-    static const lb_attr_t temperature[] = {
-        LB_SNS_ATTR_VALUE(),
-        LB_SNS_ATTR_QUANTITY(LB_QUANTITY_TEMPERATURE),
-    };
-    static const lb_attr_t humidity[] = {
-        LB_SNS_ATTR_VALUE(),
-        LB_SNS_ATTR_QUANTITY(LB_QUANTITY_HUMIDITY),
-    };
+    static const lb_attr_t temperature[] = ENV_ROWS(LB_QUANTITY_TEMPERATURE);
+    static const lb_attr_t humidity[] = ENV_ROWS(LB_QUANTITY_HUMIDITY);
+    static const lb_attr_t light[] = ENV_ROWS(LB_QUANTITY_ILLUMINANCE);
+    const uint16_t features = LB_SNS_F_MIN_MAX | LB_SNS_F_THRESHOLD;
     sim->device_type = 0x0030;
     sim->node_class = LB_CLASS_SENSOR;
-    lbs_add_sense(sim, LB_QUANTITY_TEMPERATURE, temperature, LBS_COUNT(temperature));
-    lbs_add_sense(sim, LB_QUANTITY_HUMIDITY, humidity, LBS_COUNT(humidity));
+    lbs_add_sense(sim, LB_QUANTITY_TEMPERATURE, features, temperature, LBS_COUNT(temperature));
+    lbs_add_sense(sim, LB_QUANTITY_HUMIDITY, features, humidity, LBS_COUNT(humidity));
+    lbs_add_sense(sim, LB_QUANTITY_ILLUMINANCE, features, light, LBS_COUNT(light));
 }
 
 /* --- the catalogue ------------------------------------------------------------------ */
@@ -266,7 +274,7 @@ const lbs_device_t lbs_devices[] = {
     {"output8",   "eight relays that remember their state",                  output8,   0},
     {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
     {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
-    {"env",       "a room sensor: temperature and humidity",                 env,       0},
+    {"env",       "a room sensor: temperature, humidity, light",             env,       0},
 };
 
 const size_t lbs_device_total = sizeof lbs_devices / sizeof lbs_devices[0];

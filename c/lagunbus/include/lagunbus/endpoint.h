@@ -143,6 +143,19 @@ typedef uint8_t (*lb_long_read_fn)(struct lb_endpoint *self, uint8_t element,
 typedef uint8_t (*lb_long_write_fn)(struct lb_endpoint *self, uint8_t element,
                                     const uint8_t *value, uint8_t len);
 
+/** The hysteresis that applies to a reported attribute right now, in its units on the
+ * wire, given the value last REPORTED. NULL means `ReportHysteresis` as it is — every
+ * type but one.
+ *
+ * The one is `Sense` measuring light: a change is worth a report at `ReportHysteresis`
+ * or 10 % of the last reported value, whichever is more (types/0x0030-sense.md §5.3,
+ * zadania/zrobione/DEVICE-01.md N2). The engine knows no quantities, and a type cannot
+ * decide alone whether a value is a change — the baseline is the node's — so the type
+ * lends the rule and the engine keeps the bookkeeping. A hook returning 0 means any
+ * change, as `ReportHysteresis = 0` does. */
+typedef uint32_t (*lb_hysteresis_fn)(const struct lb_endpoint *self, uint8_t element,
+                                     lb_value_t reported);
+
 typedef struct lb_endpoint {
     uint8_t   number;
     uint16_t  type_id;
@@ -170,6 +183,7 @@ typedef struct lb_endpoint {
     lb_feature_fn feature_of;  /**< optional; NULL = no element is feature-bound */
     lb_long_read_fn  on_read_long;  /**< optional; needed for any `LB_T_STRING` row */
     lb_long_write_fn on_write_long; /**< optional; needed for a writable `LB_T_STRING` */
+    lb_hysteresis_fn hysteresis;    /**< optional; NULL = `ReportHysteresis` */
     void         *ctx;
 
     /* Reporting state — the node's (`lb_report_t`). */

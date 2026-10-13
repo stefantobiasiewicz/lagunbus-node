@@ -62,7 +62,12 @@
     {"note": "a bit field has no absent — all ones is a value", "type": "map8", "value": 255, "bytes": "FF"},
     {"type": "map16", "value": 65535, "bytes": "FFFF"},
     {"type": "map32", "value": 1, "bytes": "01000000"},
-    {"type": "u32", "value": null, "bytes": "FFFFFFFF"}
+    {"type": "u32", "value": null, "bytes": "FFFFFFFF"},
+    {"note": "Sense TEMPERATURE: 21.37 °C is i16 2137 (zadania/zrobione/DEVICE-01.md)", "type": "i16", "value": 2137, "bytes": "5908"},
+    {"note": "Sense TEMPERATURE below zero: -5.20 °C", "type": "i16", "value": -520, "bytes": "F8FD"},
+    {"note": "Sense HUMIDITY: 48.20 % is u16 4820", "type": "u16", "value": 4820, "bytes": "D412"},
+    {"note": "Sense ILLUMINANCE: 312 lx is u32 31200 — 0.01 lx does not fit 16 bits past 655 lx", "type": "u32", "value": 31200, "bytes": "E0790000"},
+    {"note": "Sense ILLUMINANCE in sunlight: 100 000 lx", "type": "u32", "value": 10000000, "bytes": "80969800"}
   ],
 
   "value_refusals": [

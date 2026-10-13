@@ -1,0 +1,22 @@
+{
+  "about": "Sense ILLUMINANCE (types/0x0030-sense.md §5.3; zadania/zrobione/DEVICE-01.md N2): profile env, ep6, u32 in 0.01 lx. ReportHysteresis is 5000 (50 lx) by default and is the floor: a change is worth a report at max(ReportHysteresis, 10 % of the last REPORTED value). ReportHysteresis = 0 still means any change.",
+  "profile": "env",
+  "uid": "A1B2C3D400030408",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "Quantity of ep6", "rx": ["0C108601#01"], "expect": ["0E108601#0102"]},
+    {"at": 110, "note": "ReportHysteresis: 50 lx", "rx": ["0C1086FA#02"], "expect": ["0E1086FA#028813"]},
+    {"at": 1000, "note": "the first reading: 100 lx", "sense": {"6": 10000}, "expect": ["10108600#10270000"]},
+    {"at": 2000, "note": "+40 lx: under 50 lx", "sense": {"6": 14000}},
+    {"at": 3000, "note": "+50 lx: 10 % of 100 lx is less, the floor decides", "sense": {"6": 15000}, "expect": ["10108600#983A0000"]},
+    {"at": 4000, "note": "10 000 lx", "sense": {"6": 1000000}, "expect": ["10108600#40420F00"]},
+    {"at": 5000, "note": "+900 lx: under 10 % of 10 000 lx", "sense": {"6": 1090000}},
+    {"at": 6000, "note": "−900 lx from the reported: still under", "sense": {"6": 910000}},
+    {"at": 7000, "note": "+1000 lx: 10 %", "sense": {"6": 1100000}, "expect": ["10108600#E0C81000"]},
+    {"at": 8000, "note": "ReportHysteresis 0", "rx": ["0A1086FA#030000"], "expect": ["0E1086FA#03"]},
+    {"at": 9000, "note": "0.01 lx more: any change", "sense": {"6": 1100001}, "expect": ["10108600#E1C81000"]}
+  ]
+}

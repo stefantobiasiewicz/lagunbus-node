@@ -115,18 +115,19 @@ def test_a_sensor_holds_what_it_was_handed() -> None:
     env = SimDevice("env", UID)
     env.store_put("address", bytes.fromhex("4200"))
     env.start(0)
-    assert env.sensors == [(4, 0, None), (5, 1, None)], "absent before any measurement"
+    absent = [(4, 0, None), (5, 1, None), (6, 2, None)]
+    assert env.sensors == absent, "absent before any measurement"
     env.sense(4, 2150)
     env.sense(5, 4500)
-    assert [s.value for s in env.sensors] == [2150, 4500]
+    assert [s.value for s in env.sensors] == [2150, 4500, None]
     env.sense(4, None)
     assert env.sensors[0].value is None
-    with pytest.raises(ValueError, match="ep6"):
-        env.sense(6, 1)
+    with pytest.raises(ValueError, match="ep7"):
+        env.sense(7, 1)
 
 
 def test_sensors_can_be_listed_before_the_start() -> None:
     """`lagun-sim --headless` prints them before it powers the node on — the endpoint has
     to be there from the device's definition, not from `lb_sense_init`."""
     env = SimDevice("env", UID)
-    assert [(s.endpoint, s.quantity) for s in env.sensors] == [(4, 0), (5, 1)]
+    assert [(s.endpoint, s.quantity) for s in env.sensors] == [(4, 0), (5, 1), (6, 2)]

@@ -156,11 +156,12 @@ lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
 lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
                                uint8_t count, uint16_t own_timeout_s);
 
-/** Add a sensor of `quantity`, the same way, with channel 0 — it measures the room, not
- * a channel (§5.6) — and the quantity's reporting defaults (§5.3). `attrs` must hold
- * `Value` and `Quantity`. Returns the endpoint or NULL. */
-lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, const lb_attr_t *attrs,
-                             uint8_t count);
+/** Add a sensor of `quantity` with `features`, the same way, with channel 0 — it
+ * measures the room, not a channel (§5.6) — and the quantity's defaults
+ * (`lb_sense_defaults`). `attrs` must hold `Value` and `Quantity`, and the rows of the
+ * features. Returns the endpoint or NULL. */
+lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, uint16_t features,
+                             const lb_attr_t *attrs, uint8_t count);
 
 /* --- the API for Python ------------------------------------------------------------- */
 

@@ -1,0 +1,19 @@
+{
+  "about": "Sense settings and extremes come back from the store at start (types/0x0030-sense.md §2; zadania/zrobione/DEVICE-01.md): ⟨Q⟩ attributes take their type from Quantity, which has to be known BEFORE the node restores them — a temperature threshold is two bytes, a light one four. Value is still absent: it is measured, not stored.",
+  "profile": "env",
+  "uid": "A1B2C3D400030409",
+  "jitter": 0,
+  "store": {"address": "4200", "a4.02": "F8FD", "a4.03": "1C0C", "a4.10": "1E00", "a4.12": "280A", "a6.11": "D0070000", "a5.13": "2C01"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "MinMeasured of ep4", "rx": ["0C108402#01"], "expect": ["0E108402#01F8FD"]},
+    {"at": 110, "note": "MaxMeasured of ep4", "rx": ["0C108403#02"], "expect": ["0E108403#021C0C"]},
+    {"at": 120, "note": "Offset of ep4", "rx": ["0C108410#03"], "expect": ["0E108410#031E00"]},
+    {"at": 130, "note": "ThresholdHigh of ep4", "rx": ["0C108412#04"], "expect": ["0E108412#04280A"]},
+    {"at": 140, "note": "ThresholdLow of ep6, four bytes", "rx": ["0C108611#05"], "expect": ["0E108611#05D0070000"]},
+    {"at": 150, "note": "ThresholdHysteresis of ep5", "rx": ["0C108513#06"], "expect": ["0E108513#062C01"]},
+    {"at": 160, "note": "Value is not stored", "rx": ["0C108400#07"], "expect": ["0E108400#070080"]},
+    {"at": 1000, "note": "a reading takes Offset: 21.50 °C read, 21.80 °C", "sense": {"4": 2150}, "expect": ["10108400#8408"]}
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "about": "Sense THRESHOLD (types/0x0030-sense.md §5.4, §5.5): profile env, ep4 TEMPERATURE, thresholds 18.00 / 26.00 °C, hysteresis 0.50 °C. Threshold (zone, value) goes out at every crossing between zones and only then: into ABOVE_HIGH above High, into BELOW_LOW below Low, back to NORMAL at High − hysteresis or Low + hysteresis; ABOVE_HIGH straight to BELOW_LOW is one event. The zone is set by the first good reading without an event — no crossing has happened (§5.5). A failed reading changes no zone. A threshold left absent is inactive. The event goes out before the report of the same measurement. Thresholds default to absent; the hysteresis the device exposes defaults to the quantity's report hysteresis (DEVICE-01).",
+  "profile": "env",
+  "uid": "A1B2C3D400030407",
+  "jitter": 0,
+  "store": {"address": "4200"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 50, "note": "no cycle on ep4: only what the scenario is about goes out", "rx": ["0A1084F8#010000"], "expect": ["0E1084F8#01"]},
+    {"at": 100, "note": "thresholds are absent by default", "rx": ["0C108412#02"], "expect": ["0E108412#020080"]},
+    {"at": 110, "note": "the hysteresis: 0.20 °C by default", "rx": ["0C108413#03"], "expect": ["0E108413#031400"]},
+    {"at": 200, "note": "ThresholdHigh 26.00 °C", "store": {"a4.12": "280A"}, "rx": ["0A108412#04280A"], "expect": ["0E108412#04"]},
+    {"at": 210, "note": "ThresholdLow 18.00 °C", "rx": ["0A108411#050807"], "expect": ["0E108411#05"]},
+    {"at": 220, "note": "ThresholdHysteresis 0.50 °C", "rx": ["0A108413#063200"], "expect": ["0E108413#06"]},
+    {"at": 1000, "note": "the first reading is above High: the zone is set, no event", "sense": {"4": 2700}, "expect": ["10108400#8C0A"]},
+    {"at": 2000, "note": "25.80 °C: inside the hysteresis, still ABOVE_HIGH", "sense": {"4": 2580}, "expect": ["10108400#140A"]},
+    {"at": 3000, "note": "25.50 °C = High − hysteresis: NORMAL", "sense": {"4": 2550}, "expect": ["02108401#0000F609", "10108400#F609"]},
+    {"at": 4000, "note": "26.00 °C: at the threshold is not above it", "sense": {"4": 2600}, "expect": ["10108400#280A"]},
+    {"at": 5000, "note": "26.01 °C: ABOVE_HIGH", "sense": {"4": 2601}, "expect": ["02108401#0102290A"]},
+    {"at": 6000, "note": "the sensor fails: no event, the zone stays", "sense": {"4": null}, "expect": ["10108400#0080"]},
+    {"at": 7000, "note": "back at 26.30 °C: still ABOVE_HIGH, no event", "sense": {"4": 2630}, "expect": ["10108400#460A"]},
+    {"at": 8000, "note": "17.00 °C: straight to BELOW_LOW, one event", "sense": {"4": 1700}, "expect": ["02108401#0201A406", "10108400#A406"]},
+    {"at": 9000, "note": "18.40 °C: below Low + hysteresis, still BELOW_LOW", "sense": {"4": 1840}, "expect": ["10108400#3007"]},
+    {"at": 10000, "note": "18.50 °C: NORMAL", "sense": {"4": 1850}, "expect": ["02108401#03003A07"]},
+    {"at": 11000, "note": "17.99 °C: BELOW_LOW", "sense": {"4": 1799}, "expect": ["02108401#04010707", "10108400#0707"]},
+    {"at": 11100, "note": "ThresholdLow absent: inactive", "rx": ["0A108411#070080"], "expect": ["0E108411#07"]},
+    {"at": 12000, "note": "a reading below the old Low: back to NORMAL", "sense": {"4": 1700}, "expect": ["02108401#0500A406", "10108400#A406"]},
+    {"at": 13000, "note": "and nothing below it any more", "sense": {"4": 500}, "expect": ["10108400#F401"]}
+  ]
+}

@@ -236,8 +236,8 @@ lb_endpoint_t *lbs_add_display(lbs_t *sim, uint16_t features, const lb_attr_t *a
     return ep;
 }
 
-lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, const lb_attr_t *attrs,
-                             uint8_t count)
+lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, uint16_t features,
+                             const lb_attr_t *attrs, uint8_t count)
 {
     uint8_t index = sim->sense_count;
     lb_endpoint_t *ep = s_next(sim, LB_TYPE_SENSE, attrs, count, LBS_SENSE, index);
@@ -246,6 +246,8 @@ lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, const lb_attr_t *attr
     }
     sim->sense_count++;
     ep->channel = 0;
+    ep->features = features;
+    ep->feature_of = lb_sense_feature_of;
     lb_sense_defaults(ep, quantity);
     /* The endpoint now, not at `lb_sense_init`: Python may list the sensors before the
      * start (`lagun-sim --headless` does), and a NULL there is a crash, not an empty list. */
