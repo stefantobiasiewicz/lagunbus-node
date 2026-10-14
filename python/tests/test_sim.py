@@ -112,8 +112,8 @@ def test_display_fields_show_what_was_written() -> None:
 
 def test_epd_shows_on_the_glass_what_the_board_would() -> None:
     """`epd` (zadania/zrobione/DEVICE-04.md, N3, N9): the fields drawn in the e-paper's
-    places and refreshed as the board refreshes — the clear at start, a value at once while
-    the glass shows none, the next change only after the gap."""
+    places and refreshed as the board refreshes — the clear at start, then every write at
+    once (no gap since 2026-10-14), and nothing for a write the glass already shows."""
     screen = SimDevice("epd", UID)
     screen.store_put("address", bytes.fromhex("4200"))
     screen.start(0)
@@ -122,29 +122,25 @@ def test_epd_shows_on_the_glass_what_the_board_would() -> None:
     def glass() -> list[str | None]:
         return [f.glass for f in screen.display_fields]
 
-    def pending() -> bool:
-        # A function, not the property: mypy would keep the property narrowed by the
-        # first assert and call the later ones unreachable.
-        return screen.display_pending
-
     assert [(f.endpoint, f.quantity) for f in screen.display_fields] == [(4, 0), (5, 1)]
     assert glass() == [" --.-", "--.-"], "cleared at start: empty fields are dashes"
-    assert screen.display_refreshes == 1 and not pending()
+    assert screen.display_refreshes == 1
 
     screen.rx(Frame(0x0A108402, bytes([1]) + (2137).to_bytes(2, "little", signed=True)))
     screen.set_clock(1000)
     screen.loop(0)
-    assert glass() == [" 21.4", "--.-"], "at once — the glass had no number"
+    assert glass() == [" 21.4", "--.-"]
 
     screen.rx(Frame(0x0A108502, bytes([2]) + (4550).to_bytes(2, "little")))
+    screen.set_clock(1500)
+    screen.loop(0)
+    assert glass() == [" 21.4", "45.5"], "at once — no gap"
+    assert screen.display_refreshes == 3 and not screen.display_pending
+
+    screen.rx(Frame(0x0A108402, bytes([3]) + (2141).to_bytes(2, "little", signed=True)))
     screen.set_clock(2000)
     screen.loop(0)
-    assert glass() == [" 21.4", "--.-"] and pending(), "waits for the gap"
-
-    screen.set_clock(61000)
-    screen.loop(0)
-    assert glass() == [" 21.4", "45.5"] and not pending()
-    assert screen.display_refreshes == 3
+    assert screen.display_refreshes == 3, "21.41 is 21.4 again — nothing to refresh"
 
 
 def test_a_display_without_segments_has_no_glass() -> None:

@@ -534,8 +534,10 @@ so `lagun-sim` shows what the glass would, not the raw number:
 - **`tools/epaper.h` — when to refresh, and how.** The first refresh is full and at once
   (the glass still shows the picture from before the power went — FEAT-12 N13); none
   while the picture equals the glass; at most one per `min_gap_ms`, **except while the
-  glass shows no number**, so a value after a start or an expiry is not a minute late;
-  a full one after `full_every` partial ones (DEVICE-04, N3).
+  glass shows no number**, so a value after a start or an expiry is never late;
+  a full one after `full_every` partial ones (DEVICE-04, N3). `epd` runs with no gap
+  (2026-10-14: a minute behind the sensor was too slow to live with) — the gap stays a
+  parameter for a screen that needs one.
 
 Rejected: all of it in the board's component — simpler, but not testable on a computer,
 against the rule that logic lives here and boards only touch hardware. The pacer knows

@@ -231,8 +231,8 @@ static void display(lbs_t *sim, uint8_t channels)
 /** The board `epd` (devices/apps/epd, zadania/zrobione/DEVICE-04.md): the Waveshare 1.9″
  * segment e-paper — a temperature in "188.8 °C" on ep4, a humidity in "88.8 %" on ep5,
  * VALUE only, each with `ContentTimeout` (N6). The glass is paced as the board paces it —
- * at most every 60 s, a full refresh after 10 partial ones (N3); the board takes both from
- * Kconfig, these are its defaults. The layouts are the board's too (N1): −9.9 … 199.9 °C,
+ * every write at once as a partial refresh, a full one after 10 partial ones (N3, without
+ * the gap since 2026-10-14); the board takes both from Kconfig, these are its defaults. The layouts are the board's too (N1): −9.9 … 199.9 °C,
  * 0.0 … 99.9 %. `DeviceType` 0x0023 (N8). */
 static void epd(lbs_t *sim, uint8_t channels)
 {
@@ -254,7 +254,7 @@ static void epd(lbs_t *sim, uint8_t channels)
     static const lb_digits_t percent = {.whole = 2, .leading_one = false, .decimals = 1,
                                         .minus = false};
     sim->device_type = 0x0023;
-    lbs_epaper(sim, 60000u, 10u);
+    lbs_epaper(sim, 0u, 10u);
     lbs_display_digits(sim, lbs_add_display(sim, LB_DSP_F_VALUE, temperature,
                                             LBS_COUNT(temperature), 0),
                        &degrees);
