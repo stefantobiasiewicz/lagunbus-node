@@ -150,6 +150,11 @@ def load() -> ctypes.CDLL:
     sig("lbs_sense_value", b, ptr, i32, ctypes.POINTER(i32))
     sig("lbs_sense_update", None, ptr, i32, i32)
     sig("lbs_sense_fail", None, ptr, i32)
+    sig("lbs_dial_count", i32, ptr)
+    sig("lbs_dial_endpoint", i32, ptr, i32)
+    sig("lbs_dial_value", i32, ptr, i32)
+    sig("lbs_dial_range", None, ptr, i32, ctypes.POINTER(i32), ctypes.POINTER(i32))
+    sig("lbs_dial_turn", None, ptr, i32, i32)
     return lib
 
 
@@ -183,6 +188,15 @@ class Sensor(NamedTuple):
     value: int | None
     """The raw `Value`, `None` while absent — before the first measurement or after a
     failed one."""
+
+
+class Dial(NamedTuple):
+    """One `ValueInput` endpoint (types/0x0011-value-input.md) — its value and range, in ‰."""
+
+    endpoint: int
+    value: int
+    min_value: int
+    max_value: int
 
 
 class DeviceInfo(NamedTuple):
@@ -420,6 +434,34 @@ class SimDevice:
                     self.lib.lbs_sense_update(self._h, i, raw)
                 return
         raise ValueError(f"no sensor at ep{endpoint}")
+
+    # --- value inputs (types/0x0011-value-input.md) -------------------------------------
+
+    @property
+    def dials(self) -> list[Dial]:
+        out = []
+        for i in range(self.lib.lbs_dial_count(self._h)):
+            lo, hi = ctypes.c_int32(), ctypes.c_int32()
+            self.lib.lbs_dial_range(self._h, i, ctypes.byref(lo), ctypes.byref(hi))
+            out.append(
+                Dial(
+                    endpoint=int(self.lib.lbs_dial_endpoint(self._h, i)),
+                    value=int(self.lib.lbs_dial_value(self._h, i)),
+                    min_value=int(lo.value),
+                    max_value=int(hi.value),
+                )
+            )
+        return out
+
+    def turn(self, endpoint: int, detents: int) -> None:
+        """Turn the `ValueInput` at `endpoint` by `detents` (negative: down). Collected
+        as a board's interrupt collects them and handed to the library at the next loop —
+        several before one loop are one step of several (zadania/devices/DEVICE-02.md N11)."""
+        for i, dial in enumerate(self.dials):
+            if dial.endpoint == endpoint:
+                self.lib.lbs_dial_turn(self._h, i, detents)
+                return
+        raise ValueError(f"no value input at ep{endpoint}")
 
     @property
     def display_pending(self) -> bool:

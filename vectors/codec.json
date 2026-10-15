@@ -2,6 +2,7 @@
   "about": "Codec vectors: whole values in, whole bits out. Both libraries run every entry (python/tests/conformance/test_codec.py). Identifiers come from lagunbus-spec/PRZYKLADY.md, worked out by hand from chapter 05; the rest were written out from 02-typy-danych.md and 05-mapowanie-can.md, and the ShortId value was computed independently with Python's zlib.crc32. Numbers are written as hex strings where the spec writes them in hex.",
 
   "identifiers": [
+    {"note": "ValueInput.Changed from the dial (zadania/devices/DEVICE-02.md)", "kind": "EVENT", "address": "0x042", "endpoint": 4, "element": "0x01", "can_id": "0x02108401"},
     {"note": "PRZYKLADY 2: Recall scene 1 in group 5", "kind": "GROUP_COMMAND", "address": "0x005", "endpoint": 3, "element": "0x01", "can_id": "0x08014301"},
     {"note": "PRZYKLADY 1: hub -> Groups of 0x020", "kind": "COMMAND", "address": "0x020", "endpoint": 2, "element": "0x00", "can_id": "0x06080200"},
     {"note": "PRZYKLADY 1: the reply from the same address", "kind": "RESPONSE", "address": "0x020", "endpoint": 2, "element": "0x00", "can_id": "0x0E080200"},
@@ -44,6 +45,7 @@
   ],
 
   "values": [
+    {"note": "ValueInput.Changed delta of a wrap from 1000 to 0: arithmetic, -1000 (DEVICE-02 S2)", "type": "i16", "value": -1000, "bytes": "18FC"},
     {"note": "u16 goes low byte first", "type": "u16", "value": 300, "bytes": "2C01"},
     {"type": "u32", "value": 16909060, "bytes": "04030201"},
     {"note": "a negative i16 comes back negative", "type": "i16", "value": -1, "bytes": "FFFF"},

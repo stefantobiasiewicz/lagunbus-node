@@ -1,0 +1,19 @@
+{
+  "about": "ValueInput at start and after a factory reset (types/0x0011-value-input.md §5.6; zadania/devices/DEVICE-02.md S1): a stored Value comes back; one outside the stored range is clipped to it; FactoryReset erases Value and the range — a new boot starts at MinValue — but not ChangeCount, which counts wear, as PressCount does.",
+  "profile": "dial",
+  "uid": "A1B2C3D400040507",
+  "jitter": 0,
+  "store": {"address": "4200", "a4.00": "3200", "a4.01": "07000000", "a4.10": "6400"},
+  "pin": true,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 100, "note": "50 below the stored MinValue 100: clipped", "rx": ["0C108400#01"], "expect": ["0E108400#016400"]},
+    {"at": 200, "rx": ["0C108401#02"], "expect": ["0E108401#0207000000"]},
+    {"at": 1000, "turn": {"4": -1}},
+    {"at": 1100, "note": "at MinValue a step down is nothing", "rx": ["0C108400#03"], "expect": ["0E108400#036400"]},
+    {"at": 2000, "turn": {"4": 1}, "expect": ["02108401#0078001400", "10108400#7800"]},
+    {"at": 7000, "store": {"a4.00": "7800", "a4.01": "08000000"}},
+    {"at": 8000, "note": "FactoryReset", "rx": ["06108002#044E47414C"], "expect": ["0E108002#04"]},
+    {"at": 8100, "note": "settings gone, the counter stays; without a restart the node rejoins (factory_reset.json)", "expect": ["1F3C1A4B#4B1A3CBB01"], "store": {"a4.00": null, "a4.10": null, "a4.01": "08000000"}}
+  ]
+}

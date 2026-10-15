@@ -27,6 +27,7 @@ def test_the_catalogue_lists_every_device_with_a_description() -> None:
         "display",
         "epd",
         "env",
+        "dial",
     ]
     assert all(d.about for d in devices())
 

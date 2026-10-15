@@ -12,7 +12,7 @@
  *
  * Adding a device: a function below and a line in `lbs_devices`. Nothing else — the
  * endpoint numbers (4, 5, …), channels and hooks come from `lbs_add_key` /
- * `lbs_add_output` / `lbs_add_display` / `lbs_add_sense`.
+ * `lbs_add_output` / `lbs_add_display` / `lbs_add_sense` / `lbs_add_value_input`.
  */
 #include "sim.h"
 
@@ -296,6 +296,39 @@ static void env(lbs_t *sim, uint8_t channels)
     lbs_add_sense(sim, LB_QUANTITY_ILLUMINANCE, features, light, LBS_COUNT(light));
 }
 
+/* --- value inputs ------------------------------------------------------------------ */
+
+/** As devices/apps/dial: an encoder — `ValueInput`, the step of `ValueInput` §6 for an
+ * encoder, no wrap — and the key in its shaft, a `KeyInput` with multi-click and hold as
+ * `apps/key`, on the same channel: one thing a person touches (01-model-danych.md §5;
+ * zadania/devices/DEVICE-02.md). The detents arrive already counted: the quadrature is
+ * the board's (N10). */
+static void dial(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t knob[] = {
+        LB_VI_ATTR_VALUE(),
+        LB_VI_ATTR_CHANGE_COUNT(),
+        LB_VI_ATTR_MIN_VALUE(0),
+        LB_VI_ATTR_MAX_VALUE(1000),
+        LB_VI_ATTR_STEP_SIZE(20),
+        LB_VI_ATTR_WRAP(0),
+    };
+    static const lb_attr_t shaft[] = {
+        LB_KEY_ATTR_PRESS_COUNT(),
+        LB_KEY_ATTR_EVENT_MODE(),
+        LB_KEY_ATTR_MULTI_CLICK_WINDOW(350),
+        LB_KEY_ATTR_MAX_CLICKS(3),
+        LB_KEY_ATTR_HOLD_ENABLED(),
+        LB_KEY_ATTR_HOLD_THRESHOLD(500),
+        LB_KEY_ATTR_HOLD_TICK_INTERVAL(200),
+    };
+    key_board(sim);
+    sim->device_type = 0x0012;
+    lbs_add_value_input(sim, knob, LBS_COUNT(knob), 20);
+    lbs_add_key(sim, LB_KEY_F_MULTICLICK | LB_KEY_F_HOLD, shaft, LBS_COUNT(shaft));
+}
+
 /* --- the catalogue ------------------------------------------------------------------ */
 
 const lbs_device_t lbs_devices[] = {
@@ -311,6 +344,7 @@ const lbs_device_t lbs_devices[] = {
     {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
     {"epd",       "e-paper as devices/apps/epd: temperature and humidity",   epd,       0},
     {"env",       "a room sensor: temperature, humidity, light",             env,       0},
+    {"dial",      "a knob as devices/apps/dial: encoder value and shaft key", dial,      0},
 };
 
 const size_t lbs_device_total = sizeof lbs_devices / sizeof lbs_devices[0];

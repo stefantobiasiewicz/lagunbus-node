@@ -98,7 +98,7 @@ The C library is split by what a piece IS:
 |---|---|---|
 | core | `include/lagunbus/*.h`, `src/*.c` | frame, values, endpoint, node, the two interfaces — every node needs them |
 | `tools/` | `…/tools/debounce.h`, `digits.h`, `epaper.h`, `led.h`, `service.h` | helpers a device MAY use; none belongs to a type (a bounce filter serves `KeyInput`, `Contact` and `ToggleInput` alike; the status LED and the service button serve every device; a number in segment places and the pacing of an e-paper serve any screen of that kind) |
-| `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h`, `…/types/sense.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
+| `types/` | `…/types/key.h`, `…/types/output.h`, `…/types/display.h`, `…/types/sense.h`, `…/types/value_input.h` | the pieces of one endpoint type each: attribute rows, endpoint hooks, behaviour, event encoders |
 
 Include as `"lagunbus/types/key.h"`. A new type goes to `types/`, a helper that no type
 owns to `tools/` (`zadania/zrobione/CR-01.md`, step 6).
@@ -544,6 +544,38 @@ against the rule that logic lives here and boards only touch hardware. The pacer
 nothing of the panel being busy: the board does not ask while it is (N10), and the
 simulator's refresh takes no time.
 
+### `ValueInput`: the number is the library's, the detents the board's (2026-10-15)
+
+The first board with `ValueInput` is a knob, an EC11 encoder with a key in its shaft
+(`devices/apps/dial`, `zadania/devices/DEVICE-02.md`). The split follows `KeyInput`
+(CR-01): the library has no hardware, not even a quadrature decoder (N10) — the ESP32-C3
+has no pulse counter, so the board decodes the Gray code in an interrupt, divides by its
+transitions per detent and hands in "n steps". What the library keeps is what the hub
+sees and a driven clock can pin (`vectors/scenarios/value_input*.json`):
+
+- **Several steps at once are one change** (N11): detents counted between two loops go
+  out as ONE `Changed` with the summed `delta`. `value` is absolute, so nothing is lost,
+  and a fast turn costs fewer frames.
+- **Limits** (S2): a step past a limit reaches it; at the limit nothing changes and
+  nothing is said; with `Wrap` only a step FROM a limit wraps; `delta` is arithmetic
+  (1000 → 0 is −1000).
+- **A narrowed range clips `Value`** (S1) — reported, stored, no `Changed`. A written
+  `Value` outside the range, `Min > Max`, `StepSize 0` are `INVALID_VALUE`.
+- **Stored 5 s after the last step**, `Value` and `ChangeCount` together; a write from the
+  hub is stored at once by the node, as every write.
+- **A write of a reported attribute is reported** — by the node, for every type, next to
+  the reply and under `ReportMinGap` (04-interakcje.md §4.2, N13). Before 2026-10-16 the
+  node waited for the cycle; `Value` is the first reported attribute one can write, and
+  the type's text said "with the next cycle" against the general rule. `ChangeCount` survives a factory
+  reset like `PressCount`; `Value` comes back as `MinValue` — the row says 0 and
+  `lb_value_input_init` clips it, so a board does not repeat its `MinValue` twice.
+- **The hooks come at init, after the restore**, as in `Sense`: a stored `Value` is
+  clipped there rather than refused against a range the node has not restored yet.
+
+Rejected: press/release with hold in the library — hold left the type in CR-04, and no
+device needs it; a pair of keys that scrolls on hold calls `lb_value_input_step` from its
+own timer.
+
 ## The registry
 
 ```sh
@@ -557,7 +589,7 @@ still carries Polish names, and the generator holds the translation table. It mu
 the one in `hub/tools/generate_registry.py`, and an unknown name fails on purpose.
 
 The endpoint catalogue (`types/*.md`) is prose, so attribute numbers are hand-copied in
-`types/key.h`, `types/output.h`, `types/display.h` and `types/sense.h`. A type change means those, plus a
+`types/key.h`, `types/output.h`, `types/display.h`, `types/sense.h` and `types/value_input.h`. A type change means those, plus a
 scenario. So are the quantities (`lb_quantity_type` in `values.c`, from
 `registry/quantities.yaml`, which the generator does not read): `vectors/codec.json`
 § quantities pins every row.

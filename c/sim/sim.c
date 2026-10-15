@@ -277,6 +277,24 @@ lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, uint16_t features,
     return ep;
 }
 
+lb_endpoint_t *lbs_add_value_input(lbs_t *sim, const lb_attr_t *attrs, uint8_t count,
+                                   uint16_t own_step)
+{
+    uint8_t index = sim->dial_count;
+    lb_endpoint_t *ep = s_next(sim, LB_TYPE_VALUEINPUT, attrs, count, LBS_DIAL, index);
+    if (ep == NULL) {
+        return NULL;
+    }
+    sim->dial_count++;
+    lb_value_input_defaults(ep);
+    /* Known before the start, as a sensor is: a view lists the dials first. `own_step`
+     * waits there for `lb_value_input_init`. */
+    sim->dials[index].endpoint = ep;
+    sim->dials[index].node = &sim->node;
+    sim->dials[index].own_step = own_step;
+    return ep;
+}
+
 static bool s_pressed(const lbs_t *sim, uint32_t pins, uint8_t input)
 {
     bool level = (pins >> input) & 1u;
@@ -461,6 +479,9 @@ void lbs_start(lbs_t *sim, uint32_t pins)
                             sim->own_timeout[n], s_drawn, sim);
         } else if (sim->role[i] == LBS_SENSE) {
             lb_sense_init(&sim->senses[n], &sim->node, &sim->endpoints[i]);
+        } else if (sim->role[i] == LBS_DIAL) {
+            lb_value_input_init(&sim->dials[n], &sim->node, &sim->endpoints[i],
+                                sim->dials[n].own_step);
         }
     }
 }
@@ -491,6 +512,11 @@ void lbs_loop(lbs_t *sim, uint32_t pins)
             lb_output_tick(&sim->outputs[n], sim->clock);
         } else if (sim->role[i] == LBS_DISPLAY) {
             lb_display_tick(&sim->displays[n], sim->clock);
+        } else if (sim->role[i] == LBS_DIAL) {
+            int32_t turns = sim->turns[n];
+            sim->turns[n] = 0;
+            lb_value_input_step(&sim->dials[n], turns);
+            lb_value_input_tick(&sim->dials[n], sim->clock);
         }
     }
     if (sim->epaper) {
@@ -676,6 +702,43 @@ void lbs_sense_fail(lbs_t *sim, int sensor)
     lb_sense_t *s = s_sensor(sim, sensor);
     if (s != NULL) {
         lb_sense_fail(s);
+    }
+}
+
+int lbs_dial_count(const lbs_t *sim) { return sim->dial_count; }
+
+static const lb_value_input_t *s_dial(const lbs_t *sim, int dial)
+{
+    return dial >= 0 && dial < sim->dial_count ? &sim->dials[dial] : NULL;
+}
+
+int lbs_dial_endpoint(const lbs_t *sim, int dial)
+{
+    const lb_value_input_t *d = s_dial(sim, dial);
+    return d == NULL ? -1 : d->endpoint->number;
+}
+
+int lbs_dial_value(const lbs_t *sim, int dial)
+{
+    const lb_value_input_t *d = s_dial(sim, dial);
+    return d == NULL ? -1 : lb_value_input_value(d);
+}
+
+void lbs_dial_range(const lbs_t *sim, int dial, int32_t *min, int32_t *max)
+{
+    const lb_value_input_t *d = s_dial(sim, dial);
+    uint16_t lo = 0, hi = 0;
+    if (d != NULL) {
+        lb_value_input_range(d, &lo, &hi);
+    }
+    *min = lo;
+    *max = hi;
+}
+
+void lbs_dial_turn(lbs_t *sim, int dial, int32_t detents)
+{
+    if (dial >= 0 && dial < sim->dial_count) {
+        sim->turns[dial] += detents;
     }
 }
 

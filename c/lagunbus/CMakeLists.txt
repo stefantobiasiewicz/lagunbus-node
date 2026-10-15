@@ -9,5 +9,6 @@ idf_component_register(
          "src/tools/debounce.c" "src/tools/digits.c" "src/tools/epaper.c"
          "src/tools/led.c" "src/tools/service.c"
          "src/types/display.c" "src/types/key.c" "src/types/output.c" "src/types/sense.c"
+         "src/types/value_input.c"
     INCLUDE_DIRS "include"
 )

@@ -19,6 +19,11 @@ turn, and `state` is the state the node last REPORTED to its state watch —
 A measurement (types/0x0030-sense.md): `sense` in a step maps an endpoint number to the
 raw value its sensor read, `null` for a failed reading — handed in before the turn, as a
 board's application does after reading its sensor.
+
+A turn (types/0x0011-value-input.md): `turn` in a step maps an endpoint number to the
+detents of its value input, negative down — what a board's interrupt counted since the
+last loop, handed to the library at the turn as one step of several
+(zadania/devices/DEVICE-02.md N11).
 """
 
 from __future__ import annotations
@@ -118,6 +123,8 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             node.service_press()
         for endpoint, raw in step.get("sense", {}).items():
             node.sense(int(endpoint), raw)
+        for endpoint, detents in step.get("turn", {}).items():
+            node.turn(int(endpoint), detents)
         node.loop(pins)
         check(where, node.take_tx(), step.get("expect", []))
 

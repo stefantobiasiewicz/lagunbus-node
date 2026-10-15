@@ -98,6 +98,9 @@ class Device(Protocol):
     def set_errors(self, tec: int, rec: int) -> None: ...
     def set_reset_reason(self, reason: str) -> None: ...
     def sense(self, endpoint: int, raw: int | None) -> None: ...
+    def turn(self, endpoint: int, detents: int) -> None:
+        """Detents of the `ValueInput` at `endpoint`, handed in at the next loop."""
+        ...
 
 
 # --- Python -------------------------------------------------------------------------
@@ -326,3 +329,6 @@ class CDevice:
 
     def sense(self, endpoint: int, raw: int | None) -> None:
         self.device.sense(endpoint, raw)
+
+    def turn(self, endpoint: int, detents: int) -> None:
+        self.device.turn(endpoint, detents)

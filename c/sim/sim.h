@@ -26,6 +26,7 @@
 #include "lagunbus/types/key.h"
 #include "lagunbus/types/output.h"
 #include "lagunbus/types/sense.h"
+#include "lagunbus/types/value_input.h"
 #include "lagunbus/tools/digits.h"
 #include "lagunbus/tools/epaper.h"
 
@@ -42,7 +43,7 @@
 
 typedef struct lbs lbs_t;
 
-typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT, LBS_DISPLAY, LBS_SENSE } lbs_role_t;
+typedef enum { LBS_NONE = 0, LBS_KEY, LBS_OUTPUT, LBS_DISPLAY, LBS_SENSE, LBS_DIAL } lbs_role_t;
 
 /** What an output's callbacks get as `ctx`: the device and WHICH output. */
 typedef struct {
@@ -109,6 +110,13 @@ struct lbs {
      * `lbs_sense_update` — as a board's application hands in what it read. */
     uint8_t    sense_count;
     lb_sense_t senses[LBS_ENDPOINTS];
+
+    /* Value inputs (types/0x0011-value-input.md). `turns` are the detents handed in from
+     * Python since the last loop — what a board's interrupt counts — given to the library
+     * as ONE step of several at the next loop (zadania/devices/DEVICE-02.md N11). */
+    uint8_t          dial_count;
+    lb_value_input_t dials[LBS_ENDPOINTS];
+    int32_t          turns[LBS_ENDPOINTS];
 
     uint8_t node_class; /**< `LB_CLASS_CONTROL` unless the device says otherwise */
 
@@ -184,6 +192,12 @@ void lbs_display_digits(lbs_t *sim, const lb_endpoint_t *field, const lb_digits_
 lb_endpoint_t *lbs_add_sense(lbs_t *sim, uint8_t quantity, uint16_t features,
                              const lb_attr_t *attrs, uint8_t count);
 
+/** Add a value input, the same way: the next channel of its own, the type's reporting
+ * defaults (`lb_value_input_defaults`). `own_step` is the step when `attrs` has no
+ * `StepSize`. Returns the endpoint or NULL. */
+lb_endpoint_t *lbs_add_value_input(lbs_t *sim, const lb_attr_t *attrs, uint8_t count,
+                                   uint16_t own_step);
+
 /* --- the API for Python ------------------------------------------------------------- */
 
 size_t      lbs_device_count(void);
@@ -258,6 +272,14 @@ int  lbs_sense_quantity(const lbs_t *sim, int sensor);
 bool lbs_sense_value(const lbs_t *sim, int sensor, int32_t *value);
 void lbs_sense_update(lbs_t *sim, int sensor, int32_t raw);
 void lbs_sense_fail(lbs_t *sim, int sensor);
+
+/** Value inputs, by index: how many, which endpoint, `Value` and the range in ‰. `turn`
+ * hands in detents — negative turns down — applied at the next `lbs_loop`. */
+int  lbs_dial_count(const lbs_t *sim);
+int  lbs_dial_endpoint(const lbs_t *sim, int dial);
+int  lbs_dial_value(const lbs_t *sim, int dial);
+void lbs_dial_range(const lbs_t *sim, int dial, int32_t *min, int32_t *max);
+void lbs_dial_turn(lbs_t *sim, int dial, int32_t detents);
 
 /** The service button: `lb_node_factory_reset()`, as a board calls it after the hold. */
 void lbs_service_press(lbs_t *sim);

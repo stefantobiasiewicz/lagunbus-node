@@ -1297,6 +1297,21 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
              * may cut the power the next moment. Anything not persistent is skipped by
              * `lb_node_persist` itself. */
             lb_node_persist(node, target, f.element);
+            /* A write of a reported attribute is reported, next to the reply
+             * (04-interakcje.md §4.2): the reply tells the writer, the report tells
+             * everyone else. Owed whatever the value — a write is a decision, not noise
+             * for hysteresis to filter — and under `ReportMinGap` like any report. Before
+             * the reply, as after a command. Until 2026-10-16 the node reported a write
+             * only with the cycle; no type here had a reported attribute one could write
+             * until `ValueInput.Value` (zadania/devices/DEVICE-02.md N13). */
+            lb_attr_t *written = lb_endpoint_attr(target, f.element);
+            if (written != NULL && (written->access & LB_REPORTED)) {
+                lb_report_t *slot = lb_endpoint_report(target, f.element, true);
+                if (slot != NULL) {
+                    slot->due = true;
+                }
+                lb_node_flush(node, target);
+            }
             if (f.element == LB_COMMON_REPORTINTERVAL) {
                 /* A new interval counts from now — not from a cycle the old one began. */
                 target->cycle_ms = node->platform->millis(node->platform->ctx);
