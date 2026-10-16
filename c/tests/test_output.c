@@ -108,10 +108,12 @@ int main(void)
 
     LB_TEST("a command from a feature that is absent says so outright");
     {
-        /* SetLevel without the LEVEL feature. An answer of "no such command" is better
-         * than silent disregard — the hub gets to learn its configuration does not
-         * fit. */
-        LB_ASSERT(lb_output_command(&out, 0x03) == LB_RESULT_UNSUPPORTED_ELEMENT);
+        /* SetLevel without the LEVEL feature. An answer that says why is better than
+         * silent disregard — the hub gets to learn its configuration does not fit:
+         * the type has the command, this output does not declare its feature
+         * (04-interakcje.md §9; "no such command" until DEVICE-03). */
+        LB_ASSERT(lb_output_command(&out, LB_OUT_CMD_SET_LEVEL) == LB_RESULT_UNSUPPORTED_FEATURE);
+        LB_ASSERT(lb_output_command(&out, 0x09) == LB_RESULT_UNSUPPORTED_ELEMENT);
     }
 
     LB_TEST("a repeated On does not touch the pin a second time");

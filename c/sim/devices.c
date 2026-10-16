@@ -12,7 +12,7 @@
  *
  * Adding a device: a function below and a line in `lbs_devices`. Nothing else — the
  * endpoint numbers (4, 5, …), channels and hooks come from `lbs_add_key` /
- * `lbs_add_output` / `lbs_add_display` / `lbs_add_sense` / `lbs_add_value_input`.
+ * `lbs_add_output` / `lbs_add_light` / `lbs_add_display` / `lbs_add_sense` / `lbs_add_value_input`.
  */
 #include "sim.h"
 
@@ -194,6 +194,39 @@ static void out8(lbs_t *sim, uint8_t channels)
     }
 }
 
+/* --- lights ------------------------------------------------------------------------- */
+
+/** As `devices/apps/rgb8`: eight WS2812 in a line as ONE light, `LEVEL | COLOR_RGB`
+ * (zadania/devices/DEVICE-03.md). No `Invert` — an LED strip has no contact and no
+ * polarity (N2); `AutoOffTime` for a night light. `ReportMinGap` 200 ms as the relays: a knob bound
+ * to `SetLevel` without a transition reports at every detent otherwise. The library
+ * hands the board intent; its brightness curve and current cap are the board's, so they
+ * are not here (H1). Scenarios: output_level.json, output_color.json,
+ * output_level_restore.json. */
+static void rgb8(lbs_t *sim, uint8_t channels)
+{
+    (void)channels;
+    static const lb_attr_t attrs[] = {
+        {LB_OUT_ON_OFF,             LB_T_BOOL,  LB_RO,              LB_NUM(0)},
+        {LB_OUT_LEVEL,              LB_T_U16,   LB_RO,              LB_NUM(0)},
+        {LB_OUT_RED,                LB_T_U8,    LB_RO | LB_PERSIST, LB_NUM(254)},
+        {LB_OUT_GREEN,              LB_T_U8,    LB_RO | LB_PERSIST, LB_NUM(254)},
+        {LB_OUT_BLUE,               LB_T_U8,    LB_RO | LB_PERSIST, LB_NUM(254)},
+        {LB_OUT_WHITE,              LB_T_U8,    LB_RO | LB_PERSIST, LB_NUM(0)},
+        {LB_OUT_TRANSITIONING,      LB_T_BOOL,  LB_RO,              LB_NUM(0)},
+        {LB_OUT_LAST_LEVEL,         LB_T_U16,   LB_RO | LB_PERSIST, LB_NUM(1000)},
+        {LB_OUT_MIN_LEVEL,          LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(10)},
+        {LB_OUT_MAX_LEVEL,          LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(1000)},
+        {LB_OUT_DEFAULT_FADE_TIME,  LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(400)},
+        {LB_OUT_POWER_ON_BEHAVIOUR, LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(LB_POWER_ON_OFF)},
+        {LB_OUT_AUTO_OFF_TIME,      LB_T_U16,   LB_RW | LB_PERSIST, LB_NUM(0)},
+        {LB_OUT_PURPOSE,            LB_T_ENUM8, LB_RW | LB_PERSIST, LB_NUM(1)},
+    };
+    sim->device_type = 0x0022;
+    min_gap_200(lbs_add_light(sim, LB_OUT_F_LEVEL | LB_OUT_F_COLOR_RGB, attrs,
+                              LBS_COUNT(attrs)));
+}
+
 /* --- displays ----------------------------------------------------------------------- */
 
 /** Three fields, one of each kind a screen has (types/0x0022-display.md §6): a
@@ -341,6 +374,7 @@ const lbs_device_t lbs_devices[] = {
     {"output2",   "two relays that remember their state",                    output2,   0},
     {"output8",   "eight relays that remember their state",                  output8,   0},
     {"out8",      "eight outputs as devices/apps/out8 (MCP23017)",           out8,      0},
+    {"rgb8",      "eight WS2812 as one colour light, as devices/apps/rgb8",  rgb8,      0},
     {"display",   "a display: temperature, a text line, humidity or text",   display,   0},
     {"epd",       "e-paper as devices/apps/epd: temperature and humidity",   epd,       0},
     {"env",       "a room sensor: temperature, humidity, light",             env,       0},

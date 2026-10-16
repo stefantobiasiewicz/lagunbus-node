@@ -92,6 +92,10 @@ class Device(Protocol):
         """The last level output `index` drove, or `None` before any."""
         ...
 
+    def light(self, index: int = 0) -> tuple[int, int, int, int, int] | None:
+        """What light output `index` was last handed — level and r, g, b, w."""
+        ...
+
     def service_press(self) -> None: ...
     def state(self) -> str | None: ...
     def set_bus(self, state: str) -> None: ...
@@ -311,6 +315,9 @@ class CDevice:
 
     def driven(self, index: int = 0) -> int | None:
         return self.device.driven(index)
+
+    def light(self, index: int = 0) -> tuple[int, int, int, int, int] | None:
+        return self.device.light(index)
 
     def service_press(self) -> None:
         self.device.service_press()

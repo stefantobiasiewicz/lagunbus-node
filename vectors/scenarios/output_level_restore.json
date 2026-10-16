@@ -1,0 +1,20 @@
+{
+  "about": "PowerOnBehaviour RESTORE with LEVEL, on the rgb8 profile (types/0x0020-output.md §2.3): the level before the power cut comes back from `output<ep>` — two bytes for an output with LEVEL, one (on/off) for one without — in the stored colour; the level is stored 5 s after the last change, not at each, so dimming by a held key does not wear the flash out in an evening.",
+  "profile": "rgb8",
+  "uid": "A1B2C3D400030803",
+  "jitter": 0,
+  "store": {"address": "4200", "a4.13": "02", "output4": "2C01", "a4.02": "00", "a4.03": "FE", "a4.04": "00"},
+  "pin": false,
+  "on_start": ["02108001#000000010000"],
+  "steps": [
+    {"at": 0, "note": "back at 300, green", "light": [300, 0, 254, 0, 0]},
+    {"at": 10, "note": "Level and OnOff say so", "rx": ["0C108401#01", "0C108400#02"],
+     "expect": ["0E108401#012C01", "0E108400#0201"]},
+    {"at": 100, "rx": ["06108403#03BC020000"], "expect": ["10108401#BC02", "0E108403#03"],
+     "light": [700, 0, 254, 0, 0]},
+    {"at": 5099, "note": "not yet", "store": {"output4": "2C01"}},
+    {"at": 5100, "note": "the level stored", "store": {"output4": "BC02", "a4.08": "BC02"}},
+    {"at": 5200, "rx": ["06108403#0400000000"], "expect": ["10108400#00", "10108401#0000", "0E108403#04"]},
+    {"at": 10200, "note": "dark is stored too: it comes back dark", "store": {"output4": "0000"}}
+  ]
+}

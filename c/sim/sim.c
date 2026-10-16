@@ -122,6 +122,16 @@ static void s_drive(void *ctx, bool level)
     ch->sim->driven[ch->index] = level ? 1 : 0;
 }
 
+static void s_light(void *ctx, uint16_t level, const uint8_t *rgbw)
+{
+    lbs_channel_t *ch = ctx;
+    int *light = ch->sim->light[ch->index];
+    light[0] = level;
+    for (int i = 0; i < 4; i++) {
+        light[1 + i] = rgbw != NULL ? rgbw[i] : (i < 3 ? 254 : 0);
+    }
+}
+
 static uint8_t s_write(lb_endpoint_t *self, uint8_t element, lb_value_t value)
 {
     lbs_channel_t *ch = self->ctx;
@@ -131,10 +141,8 @@ static uint8_t s_write(lb_endpoint_t *self, uint8_t element, lb_value_t value)
 static uint8_t s_command(lb_endpoint_t *self, uint8_t element, const uint8_t *args,
                          uint8_t len)
 {
-    (void)args;
-    (void)len;
     lbs_channel_t *ch = self->ctx;
-    return lb_output_command(&ch->sim->outputs[ch->index], element);
+    return lb_output_handle(&ch->sim->outputs[ch->index], element, args, len);
 }
 
 static lb_display_t *s_display(lb_endpoint_t *self)
@@ -210,7 +218,20 @@ lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count)
     sim->output_count++;
     ep->on_command = s_command;
     ep->on_write = s_write;
+    ep->on_check = lb_output_check;
+    ep->feature_of = lb_output_feature_of;
     ep->ctx = &sim->channels[index];
+    return ep;
+}
+
+lb_endpoint_t *lbs_add_light(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
+                             uint8_t count)
+{
+    lb_endpoint_t *ep = lbs_add_output(sim, attrs, count);
+    if (ep != NULL) {
+        ep->features = features;
+        sim->lit[sim->output_count - 1u] = true;
+    }
     return ep;
 }
 
@@ -354,6 +375,9 @@ lbs_t *lbs_create(const char *name, const uint8_t *uid, uint32_t jitter, uint8_t
     sim->jitter = jitter;
     for (uint8_t i = 0; i < LBS_ENDPOINTS; i++) {
         sim->driven[i] = -1;
+        for (int p = 0; p < 5; p++) {
+            sim->light[i][p] = -1;
+        }
         sim->channels[i] = (lbs_channel_t){.sim = sim, .index = i};
     }
     sim->key_config = (lb_key_config_t)LB_KEY_CONFIG_DEFAULT;
@@ -472,8 +496,13 @@ void lbs_start(lbs_t *sim, uint32_t pins)
             lb_key_init(&sim->keys[n], &sim->endpoints[i], &sim->key_config, pressed,
                         sim->clock);
         } else if (sim->role[i] == LBS_OUTPUT) {
-            lb_output_init(&sim->outputs[n], &sim->node, &sim->endpoints[i], s_drive,
-                           &sim->channels[n]);
+            if (sim->lit[n]) {
+                lb_output_init_light(&sim->outputs[n], &sim->node, &sim->endpoints[i],
+                                     s_light, &sim->channels[n]);
+            } else {
+                lb_output_init(&sim->outputs[n], &sim->node, &sim->endpoints[i], s_drive,
+                               &sim->channels[n]);
+            }
         } else if (sim->role[i] == LBS_DISPLAY) {
             lb_display_init(&sim->displays[n], &sim->node, &sim->endpoints[i],
                             sim->own_timeout[n], s_drawn, sim);
@@ -551,6 +580,22 @@ int lbs_output_count(const lbs_t *sim) { return sim->output_count; }
 int lbs_driven(const lbs_t *sim, int output)
 {
     return output >= 0 && output < LBS_ENDPOINTS ? sim->driven[output] : -1;
+}
+
+int lbs_light(const lbs_t *sim, int output, int part)
+{
+    if (output < 0 || output >= LBS_ENDPOINTS || part < 0 || part > 4) {
+        return -1;
+    }
+    return sim->light[output][part];
+}
+
+int lbs_light_fading(const lbs_t *sim, int output)
+{
+    if (output < 0 || output >= sim->output_count) {
+        return -1;
+    }
+    return sim->outputs[output].fade.active ? 1 : 0;
 }
 
 /** `OnOff` of output `output` — the receiver's state, before `Invert`. -1 past the last

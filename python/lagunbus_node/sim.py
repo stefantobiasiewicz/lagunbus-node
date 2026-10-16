@@ -124,6 +124,8 @@ def load() -> ctypes.CDLL:
     sig("lbs_output_count", i32, ptr)
     sig("lbs_driven", i32, ptr, i32)
     sig("lbs_output_on", i32, ptr, i32)
+    sig("lbs_light", i32, ptr, i32, i32)
+    sig("lbs_light_fading", i32, ptr, i32)
     sig("lbs_service_press", None, ptr)
     sig("lbs_state", i32, ptr)
     sig("lbs_state_reports", u32, ptr)
@@ -338,6 +340,17 @@ class SimDevice:
         it), `None` before any."""
         level = int(self.lib.lbs_driven(self._h, output))
         return None if level < 0 else level
+
+    def light(self, output: int = 0) -> tuple[int, int, int, int, int] | None:
+        """What light `output` was last handed — `(level, red, green, blue, white)`, the
+        level in per mille and the colour at full brightness — or `None` before any, and
+        for an output that is not a light."""
+        level, r, g, b, w = (int(self.lib.lbs_light(self._h, output, p)) for p in range(5))
+        return None if level < 0 else (level, r, g, b, w)
+
+    def light_fading(self, output: int = 0) -> bool:
+        """Whether light `output` is in a transition (types/0x0020-output.md §5.3)."""
+        return int(self.lib.lbs_light_fading(self._h, output)) == 1
 
     def output_on(self, output: int) -> bool:
         """`OnOff` of the output — the state, before `Invert`."""

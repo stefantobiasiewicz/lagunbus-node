@@ -24,6 +24,10 @@ A turn (types/0x0011-value-input.md): `turn` in a step maps an endpoint number t
 detents of its value input, negative down — what a board's interrupt counted since the
 last loop, handed to the library at the turn as one step of several
 (zadania/zrobione/DEVICE-02.md N11).
+
+A light (types/0x0020-output.md §5.3, §5.8): `light` in a step is what the library last
+handed the device's drive function, `[level, r, g, b, w]` for the device's one light —
+intent, before the device's brightness curve (zadania/devices/DEVICE-03.md).
 """
 
 from __future__ import annotations
@@ -141,3 +145,6 @@ def test_scenario(device: DeviceFactory, path: Path) -> None:
             wanted_levels = step["driven"] if isinstance(step["driven"], list) else [step["driven"]]
             levels = [node.driven(i) for i in range(len(wanted_levels))]
             assert levels == wanted_levels, f"{where}: the outputs drove {levels}"
+        if "light" in step:
+            lit = node.light(0)
+            assert lit == tuple(step["light"]), f"{where}: the light was handed {lit}"

@@ -24,6 +24,7 @@ def test_the_catalogue_lists_every_device_with_a_description() -> None:
         "output2",
         "output8",
         "out8",
+        "rgb8",
         "display",
         "epd",
         "env",
@@ -86,6 +87,20 @@ def test_output_on_is_the_state_and_driven_the_coil() -> None:
     device.rx(Frame(0x06108401, b"\x01"))
     device.loop(0)
     assert (device.output_on(0), device.driven(0)) == (True, 1)
+
+
+def test_a_light_shows_its_level_colour_and_transition() -> None:
+    """What `lagun-sim` draws a light from: the intent the library handed the board, and
+    whether a transition runs — `light` is None on a relay, which has no level."""
+    light = SimDevice("rgb8", UID)
+    light.store_put("address", b"\x42\x00")
+    light.start(0)
+    assert light.light(0) == (0, 254, 254, 254, 0)
+    assert not light.light_fading(0)
+    light.rx(Frame(0x06108401, b"\x01"))  # On, over DefaultFadeTime
+    light.loop(0)
+    assert light.light_fading(0)
+    assert SimDevice("output", UID).light(0) is None
 
 
 def test_display_fields_show_what_was_written() -> None:

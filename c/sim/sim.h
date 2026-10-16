@@ -33,7 +33,7 @@
 #include <stddef.h>
 
 #define LBS_ENDPOINTS 8   /**< functional endpoints per device: 4 … 11 */
-#define LBS_ATTRS     10  /**< attributes per endpoint */
+#define LBS_ATTRS     14  /**< attributes per endpoint — `rgb8`'s light has fourteen */
 #define LBS_QUEUE     256 /**< frames each way between two calls from Python */
 #define LBS_SLOTS     128 /**< keys in the persistent store — every RW,P attribute has one
                            *   since TASK-01: eight outputs x (5 common + 3-4 own) */
@@ -84,6 +84,8 @@ struct lbs {
     lb_output_t   outputs[LBS_ENDPOINTS];
     lbs_channel_t channels[LBS_ENDPOINTS];
     int           driven[LBS_ENDPOINTS]; /**< last level each output drove; -1 before any */
+    bool          lit[LBS_ENDPOINTS];    /**< the output is a light (`lbs_add_light`) */
+    int           light[LBS_ENDPOINTS][5]; /**< last level and r, g, b, w lit; -1 before any */
 
     /* Display fields (types/0x0022-display.md). `own_timeout` is the device's expiry for a
      * field that does not expose `ContentTimeout`; `drawn` counts `show` calls, so a view
@@ -172,6 +174,11 @@ bool lbs_add_key(lbs_t *sim, uint16_t features, const lb_attr_t *attrs, uint8_t 
  * the endpoint, for the device to set its common defaults (`.common`), or NULL. */
 lb_endpoint_t *lbs_add_output(lbs_t *sim, const lb_attr_t *attrs, uint8_t count);
 
+/** Add a light — an output with `features` (`LEVEL`, maybe `COLOR_RGB`), the same way;
+ * commands with their arguments go to `lb_output_handle`. Returns the endpoint or NULL. */
+lb_endpoint_t *lbs_add_light(lbs_t *sim, uint16_t features, const lb_attr_t *attrs,
+                             uint8_t count);
+
 /** Add a display field, the same way, with channel 0 — a field belongs to no channel.
  * `own_timeout_s` is its expiry when `attrs` has no `ContentTimeout`. Returns the
  * endpoint or NULL. */
@@ -243,6 +250,11 @@ uint32_t lbs_inputs_idle(const lbs_t *sim);
 int      lbs_output_count(const lbs_t *sim);
 int      lbs_driven(const lbs_t *sim, int output);
 int      lbs_output_on(const lbs_t *sim, int output);
+/** What light `output` was last handed: `part` 0 the level, 1–4 red, green, blue, white
+ * (254, 254, 254, 0 on a light without colour). -1 before any, or past the last. */
+int      lbs_light(const lbs_t *sim, int output, int part);
+/** Whether light `output` is in a transition — 1, 0, or -1 past the last output. */
+int      lbs_light_fading(const lbs_t *sim, int output);
 
 /** Display fields, by index: how many, which endpoint, what each shows. `value` is the raw
  * number with `absent` beside it; `text` copies at most `cap` bytes and returns the length.

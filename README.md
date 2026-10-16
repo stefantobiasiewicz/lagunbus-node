@@ -122,7 +122,9 @@ scenario can check: `key` (every feature, every timing tunable), `bell` (no feat
 attributes), `key_fixed` (`HOLD` and `MULTICLICK` with the device's own timings),
 `panel3` (three keys), `key3` (as `devices/apps/key3`: `RAW` and `HOLD`, no multi-click),
 `output` (as `devices/apps/output`), `output2` and `output8` (outputs that keep their own
-state), `out8` (as `devices/apps/out8`), `display` (three `Display` fields: a temperature,
+state), `out8` (as `devices/apps/out8`), `rgb8` (as `devices/apps/rgb8`: one light,
+`LEVEL | COLOR_RGB`; `light` in a step is what its drive function was last handed,
+`[level, r, g, b, w]` — `output_level.json`, `output_color.json`), `display` (three `Display` fields: a temperature,
 a text line, a humidity that can show text), `epd` (as `devices/apps/epd`: two `Display`
 fields, VALUE only, drawn in the e-paper's places and paced as its glass), `env` (as `devices/apps/env`: three `Sense`
 — a temperature, a humidity, a light — with `MIN_MAX`, `THRESHOLD` and `Offset`, values set
@@ -375,7 +377,7 @@ callback says the same.
 **The simulator's `output` and `out8` profiles have no `Invert`**, so their `driven` is
 the coil state, equal to `OnOff`; `output2`/`output8` keep it as a module with the
 normally-closed contact. Pinned by `vectors/scenarios/output.json` (a write of `Invert`
-is `UNSUPPORTED_ELEMENT`) and `output_channels.json` (the attribute exists there);
+is `UNSUPPORTED_ELEMENT` — `Invert` belongs to no feature) and `output_channels.json` (the attribute exists there);
 the inverted path itself by `c/tests/test_output.c`.
 
 **A write of `Invert` moves the coil at once** (`lb_output_write`, wired into the
@@ -575,6 +577,44 @@ sees and a driven clock can pin (`vectors/scenarios/value_input*.json`):
 Rejected: press/release with hold in the library — hold left the type in CR-04, and no
 device needs it; a pair of keys that scrolls on hold calls `lb_value_input_step` from its
 own timer.
+
+### `Output` as a light: the library fades, the board turns intent into current (2026-10-16)
+
+The first light is eight WS2812 as one endpoint, `LEVEL | COLOR_RGB`
+(`devices/apps/rgb8`, `zadania/devices/DEVICE-03.md`). The specification settled the
+colour on the way (`types/0x0020-output.md` §5.8, K1–K5): colour at full brightness,
+independent of `Level`, persistent, white after a factory reset, one transition for both;
+a component is 0–254, as every `u8` (0xFF is "absent"), so `SetColor` refuses 0xFF. Also
+settled there: `Step` up from dark lights at the step (at least `MinLevel`), down from dark
+does nothing; `On`, `Off` and `Toggle` fade over `DefaultFadeTime`.
+
+- **Two inits, one type.** `lb_output_init` drives a coil (`bool`),
+  `lb_output_init_light` a light — `(level ‰, rgbw)`, `rgbw` NULL without `COLOR_RGB`.
+  A relay keeps its exact old path; nothing in `output`/`out8` moved.
+- **The drive function gets intent.** The level in per mille and the colour at full
+  brightness — not PWM duty, not GRB bytes. The brightness curve, the channel order, a
+  white channel the LEDs lack, the current cap are the board's (N3, H1): the same split as
+  the coil's polarity, and the library stays testable without knowing an LED.
+- **Transitions here, not in hardware** (LEDC fade, RMT): one source of truth, checked on
+  a computer. Recomputed every `LB_OUT_STEP_MS` (10 ms, N4); a command first works out
+  where the light IS, so an interrupted transition starts from there.
+- **Attributes written quietly during a transition** — straight into the array, so a read
+  sees where the light is, and nothing owed; the end goes through the engine, which
+  compares with what was last REPORTED. The light settles its report baselines at init, as
+  the node does for `Diagnostics`: otherwise the first `SetLevel` would report the colour
+  and `Transitioning` too.
+- **`lb_output_set` (a direct state) does not fade** — unlike `On`/`Off`, the caller
+  asked for a state, not a command.
+  `Toggle` looks at the current `Level`, as the type's table says.
+- **Stored together, 5 s after the last change** of the level (for `RESTORE`), `LastLevel`
+  or the colour — where the light is going, not each step. `RESTORE` keeps the level in
+  `output<ep>` as two bytes; a relay keeps one.
+- **Commands are gated by feature** like attributes: `Stop` on a relay is
+  `UNSUPPORTED_FEATURE` (04-interakcje.md §9), not `UNSUPPORTED_ELEMENT` as before. A
+  separate table, because attributes and commands share numbers, not meanings.
+
+Pinned by `vectors/scenarios/output_level.json`, `output_color.json`,
+`output_level_restore.json`, and `output.json` for the relay's refusals.
 
 ## The registry
 
