@@ -1,5 +1,5 @@
 {
-  "about": "ValueInput at start and after a factory reset (types/0x0011-value-input.md §5.6; zadania/devices/DEVICE-02.md S1): a stored Value comes back; one outside the stored range is clipped to it; FactoryReset erases Value and the range — a new boot starts at MinValue — but not ChangeCount, which counts wear, as PressCount does.",
+  "about": "ValueInput at start and after a factory reset (types/0x0011-value-input.md §5.6; zadania/zrobione/DEVICE-02.md S1): a stored Value comes back; one outside the stored range is clipped to it; FactoryReset erases Value and the range — a new boot starts at MinValue — but not ChangeCount, which counts wear, as PressCount does.",
   "profile": "dial",
   "uid": "A1B2C3D400040507",
   "jitter": 0,

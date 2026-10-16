@@ -23,7 +23,7 @@ board's application does after reading its sensor.
 A turn (types/0x0011-value-input.md): `turn` in a step maps an endpoint number to the
 detents of its value input, negative down — what a board's interrupt counted since the
 last loop, handed to the library at the turn as one step of several
-(zadania/devices/DEVICE-02.md N11).
+(zadania/zrobione/DEVICE-02.md N11).
 """
 
 from __future__ import annotations

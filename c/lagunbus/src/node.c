@@ -1303,7 +1303,7 @@ static void handle_frame(lb_node_t *node, const lb_frame_t *frame)
              * for hysteresis to filter — and under `ReportMinGap` like any report. Before
              * the reply, as after a command. Until 2026-10-16 the node reported a write
              * only with the cycle; no type here had a reported attribute one could write
-             * until `ValueInput.Value` (zadania/devices/DEVICE-02.md N13). */
+             * until `ValueInput.Value` (zadania/zrobione/DEVICE-02.md N13). */
             lb_attr_t *written = lb_endpoint_attr(target, f.element);
             if (written != NULL && (written->access & LB_REPORTED)) {
                 lb_report_t *slot = lb_endpoint_report(target, f.element, true);

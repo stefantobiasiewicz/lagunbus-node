@@ -3,7 +3,7 @@
  * The type describes a NUMBER, not a finger (types/0x0011-value-input.md §1,
  * zadania/zrobione/CR-04.md): how a device arrives at the number — an encoder's detents,
  * a key pair, a slider's position — is the device's. So the library has no hardware
- * here, not even a quadrature decoder (zadania/devices/DEVICE-02.md N10): a board turns
+ * here, not even a quadrature decoder (zadania/zrobione/DEVICE-02.md N10): a board turns
  * its pins into "n steps up or down" and hands that in. What the library keeps is what
  * the hub sees and what a test can pin with a driven clock:
  *

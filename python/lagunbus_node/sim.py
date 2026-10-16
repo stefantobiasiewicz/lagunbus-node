@@ -456,7 +456,7 @@ class SimDevice:
     def turn(self, endpoint: int, detents: int) -> None:
         """Turn the `ValueInput` at `endpoint` by `detents` (negative: down). Collected
         as a board's interrupt collects them and handed to the library at the next loop —
-        several before one loop are one step of several (zadania/devices/DEVICE-02.md N11)."""
+        several before one loop are one step of several (zadania/zrobione/DEVICE-02.md N11)."""
         for i, dial in enumerate(self.dials):
             if dial.endpoint == endpoint:
                 self.lib.lbs_dial_turn(self._h, i, detents)

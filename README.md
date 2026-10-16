@@ -547,7 +547,7 @@ simulator's refresh takes no time.
 ### `ValueInput`: the number is the library's, the detents the board's (2026-10-15)
 
 The first board with `ValueInput` is a knob, an EC11 encoder with a key in its shaft
-(`devices/apps/dial`, `zadania/devices/DEVICE-02.md`). The split follows `KeyInput`
+(`devices/apps/dial`, `zadania/zrobione/DEVICE-02.md`). The split follows `KeyInput`
 (CR-01): the library has no hardware, not even a quadrature decoder (N10) — the ESP32-C3
 has no pulse counter, so the board decodes the Gray code in an interrupt, divides by its
 transitions per detent and hands in "n steps". What the library keeps is what the hub

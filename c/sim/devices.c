@@ -301,7 +301,7 @@ static void env(lbs_t *sim, uint8_t channels)
 /** As devices/apps/dial: an encoder — `ValueInput`, the step of `ValueInput` §6 for an
  * encoder, no wrap — and the key in its shaft, a `KeyInput` with multi-click and hold as
  * `apps/key`, on the same channel: one thing a person touches (01-model-danych.md §5;
- * zadania/devices/DEVICE-02.md). The detents arrive already counted: the quadrature is
+ * zadania/zrobione/DEVICE-02.md). The detents arrive already counted: the quadrature is
  * the board's (N10). */
 static void dial(lbs_t *sim, uint8_t channels)
 {

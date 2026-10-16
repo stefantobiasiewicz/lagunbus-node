@@ -113,7 +113,7 @@ struct lbs {
 
     /* Value inputs (types/0x0011-value-input.md). `turns` are the detents handed in from
      * Python since the last loop — what a board's interrupt counts — given to the library
-     * as ONE step of several at the next loop (zadania/devices/DEVICE-02.md N11). */
+     * as ONE step of several at the next loop (zadania/zrobione/DEVICE-02.md N11). */
     uint8_t          dial_count;
     lb_value_input_t dials[LBS_ENDPOINTS];
     int32_t          turns[LBS_ENDPOINTS];
