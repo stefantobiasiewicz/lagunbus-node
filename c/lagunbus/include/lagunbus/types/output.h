@@ -11,7 +11,7 @@
  * INTENT — the level in per mille and the colour at full brightness — and the device
  * turns that into current: the brightness curve, the channel order, a white channel it
  * may not have, a cap on the current (types/0x0020-output.md §5.8;
- * zadania/devices/DEVICE-03.md N3, H1). The same reasoning as the coil's polarity: the
+ * zadania/zrobione/DEVICE-03.md N3, H1). The same reasoning as the coil's polarity: the
  * device knows its LEDs, the bus does not.
  */
 #ifndef LAGUNBUS_OUTPUT_H
@@ -58,7 +58,7 @@ extern "C" {
 /** `transition` meaning "use `DefaultFadeTime`" (§3). */
 #define LB_OUT_TRANSITION_DEFAULT 0xFFFFu
 /** How often a transition is recomputed — 40 steps over the default 400 ms, smooth to
- * the eye (zadania/devices/DEVICE-03.md N4). */
+ * the eye (zadania/zrobione/DEVICE-03.md N4). */
 #define LB_OUT_STEP_MS 10u
 /** How long the level, `LastLevel` and the colour wait unchanged before they are stored
  * (§2.3, §5.8): a knob turned for a minute is one write, not hundreds. */

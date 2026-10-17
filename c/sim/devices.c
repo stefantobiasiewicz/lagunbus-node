@@ -197,7 +197,7 @@ static void out8(lbs_t *sim, uint8_t channels)
 /* --- lights ------------------------------------------------------------------------- */
 
 /** As `devices/apps/rgb8`: eight WS2812 in a line as ONE light, `LEVEL | COLOR_RGB`
- * (zadania/devices/DEVICE-03.md). No `Invert` — an LED strip has no contact and no
+ * (zadania/zrobione/DEVICE-03.md). No `Invert` — an LED strip has no contact and no
  * polarity (N2); `AutoOffTime` for a night light. `ReportMinGap` 200 ms as the relays: a knob bound
  * to `SetLevel` without a transition reports at every detent otherwise. The library
  * hands the board intent; its brightness curve and current cap are the board's, so they

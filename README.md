@@ -581,7 +581,7 @@ own timer.
 ### `Output` as a light: the library fades, the board turns intent into current (2026-10-16)
 
 The first light is eight WS2812 as one endpoint, `LEVEL | COLOR_RGB`
-(`devices/apps/rgb8`, `zadania/devices/DEVICE-03.md`). The specification settled the
+(`devices/apps/rgb8`, `zadania/zrobione/DEVICE-03.md`). The specification settled the
 colour on the way (`types/0x0020-output.md` §5.8, K1–K5): colour at full brightness,
 independent of `Level`, persistent, white after a factory reset, one transition for both;
 a component is 0–254, as every `u8` (0xFF is "absent"), so `SetColor` refuses 0xFF. Also

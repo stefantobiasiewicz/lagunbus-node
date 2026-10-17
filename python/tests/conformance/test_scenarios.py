@@ -27,7 +27,7 @@ last loop, handed to the library at the turn as one step of several
 
 A light (types/0x0020-output.md §5.3, §5.8): `light` in a step is what the library last
 handed the device's drive function, `[level, r, g, b, w]` for the device's one light —
-intent, before the device's brightness curve (zadania/devices/DEVICE-03.md).
+intent, before the device's brightness curve (zadania/zrobione/DEVICE-03.md).
 """
 
 from __future__ import annotations
