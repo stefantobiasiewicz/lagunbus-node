@@ -30,13 +30,6 @@ alone — [`zadania/zrobione/FEAT-02.md`](../zadania/zrobione/FEAT-02.md) and §
   devices/ (submodule)       lagun-sim (zadania/zrobione/FEAT-02.md)
 ```
 
-> **TODO:** this repository exists only locally — there is no GitHub repository yet.
-> `devices` already records it as a submodule at
-> `git@github.com:stefantobiasiewicz/lagunbus-node.git`; until that exists and `main` is
-> pushed there, a fresh clone of `devices` cannot fetch the library. Once created:
-> `git remote add origin <url> && git push -u origin main` here, and if the name differs,
-> `git submodule set-url lib/lagunbus-node <url>` in `devices`.
-
 The spec repository has to sit next to this one (`../lagunbus-spec`) for the registry
 generator and its check.
 
